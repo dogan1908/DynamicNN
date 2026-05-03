@@ -1,0 +1,644 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,calc,positioning}
+\usepackage[ruled,vlined,linesnumbered]{algorithm2e}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{enumitem}
+
+\newtheorem{definition}{Definition}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{remark}{Bemerkung}
+
+\newcommand{\feq}{f^{\mathrm{eq}}}
+\newcommand{\compass}{\mathrm{C16}}
+\newcommand{\floor}[1]{\lfloor #1 \rfloor}
+
+\title{\textbf{Compass16-LBM}\\[6pt]
+\large Lattice-Boltzmann-inspirierte Schwarmkoordination\\
+mit ganzzahliger Kompassdiskretisierung\\[12pt]
+\normalsize Mathematische Formulierung --- Arbeitsdokument v2}
+\author{Dogan Balban\\[4pt]
+\small\textit{Independent Research --- M\"arz 2026}}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent Wir formulieren ein diskretes Geschwindigkeitsmodell f\"ur die dezentrale Schwarmkoordination
+auf Integer-Hardware, inspiriert von der Lattice-Boltzmann-Methode (LBM).
+Statt der \"ublichen D2Q9-Diskretisierung (8~Richtungen + Ruhe) verwenden wir eine
+\textit{Compass16}-Diskretisierung (16~Richtungen + Ruhe = 17~Werte pro Agent),
+die direkt aus dem DSM-Framework (Balban, 2026) abgeleitet ist.
+Die gesamte Formulierung --- Gleichgewichtsverteilung, Relaxation, Positionsupdate ---
+verwendet ausschlie\ss lich ganzzahlige Arithmetik mit Festkomma-Skalierung $S=256$.
+Zielanwendung: Kollisionsfreie Schwarmkoordination auf 8/16-Bit-Mikrocontrollern ohne FPU.
+\end{abstract}
+
+% ============================================================
+\section{Motivation: Von LBM zu Schwarmkoordination}
+% ============================================================
+
+Die klassische Lattice-Boltzmann-Methode simuliert Fl\"ussigkeiten durch zwei lokale Operationen:
+\begin{enumerate}[itemsep=2pt]
+\item \textbf{Relaxation:} Verteilungswerte an jedem Gitterknoten n\"ahern sich dem lokalen Gleichgewicht an.
+\item \textbf{Propagation:} Jeder Verteilungswert bewegt sich einen Schritt in seine diskrete Richtung.
+\end{enumerate}
+Aus diesen rein lokalen Regeln entsteht \textit{emergentes} globales Verhalten:
+Die Navier-Stokes-Gleichungen werden makroskopisch exakt reproduziert,
+obwohl kein Agent die Gleichungen kennt oder l\"ost.
+
+\textbf{Kernidee:} Wir \"ubertragen dieses Prinzip auf mobile Agenten (Roboter, Drohnen).
+Statt Fl\"ussigkeitsteilchen koordinieren wir Agenten, die sich flie\ss end und kollisionsfrei
+bewegen --- ohne zentrale Steuerung, rein durch lokale Interaktion.
+
+\medskip
+\noindent\textbf{Begriffsklärung.}
+Die LBM-Literatur verwendet Begriffe aus der Fluiddynamik (Dichte, Druck, Schallgeschwindigkeit).
+In unserem Schwarmmodell haben diese Gr\"o\ss en eine andere Bedeutung.
+Um Verwechslungen zu vermeiden, verwenden wir durchgehend schwarmspezifische Terminologie:
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{LBM-Original} & \textbf{Schwarm-Bedeutung} & \textbf{Symbol} \\
+\midrule
+Gitterknoten & Agentenposition & $\mathbf{x}_A$ \\
+Population $f_i$ & Bewegungstendenz in Richtung $i$ & $f_k$ \\
+Lokale Dichte $\rho$ & Aktivit\"atslevel des Agenten & $\rho$ \\
+Makro-Geschwindigkeit $\mathbf{u}$ & Mittlere Bewegungsrichtung & $\mathbf{u}$ \\
+Schallgeschwindigkeit $c_s^2$ & \textit{entf\"allt} --- ersetzt durch Reaktivit\"at & $\kappa$ \\
+Druck & Interaktionsst\"arke (Nachbarabsto\ss ung) & --- \\
+Viskosit\"at & Tr\"agheit der Richtungs\"anderung & $\propto (S/\omega - 1/2)$ \\
+Bounce-Back an W\"anden & Ausweichen an Hindernissen & Richtungstausch \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ============================================================
+\section{Compass16-Geschwindigkeitssatz}
+% ============================================================
+
+\begin{definition}[Compass16-Geschwindigkeitsvektoren]
+Der diskrete Geschwindigkeitssatz $\mathcal{C}_{17} = \{\mathbf{c}_0, \mathbf{c}_1, \ldots, \mathbf{c}_{16}\}$
+besteht aus dem Ruhevektor und 16 Richtungsvektoren im Abstand von $22{,}5^\circ$:
+\begin{equation}
+\mathbf{c}_k = 
+\begin{cases}
+(0, 0) & k = 0 \quad \text{(Ruhe)} \\[4pt]
+\displaystyle\Big(\floor{256\sin\big(\tfrac{(k-1)\pi}{8}\big)},\;\;
+\floor{256\cos\big(\tfrac{(k-1)\pi}{8}\big)}\Big) & k = 1,\ldots,16
+\end{cases}
+\end{equation}
+Die Skalierung $S = 256 = 2^8$ erm\"oglicht effiziente Shift-Operationen auf 8-Bit-Hardware.
+Die Werte werden einmalig vorberechnet und als Konstanten im ROM gespeichert.
+\end{definition}
+
+\noindent Die konkreten Vektoren:
+
+\begin{center}
+\small
+\begin{tabular}{@{}clrrcclrr@{}}
+\toprule
+$k$ & Richtung & $c_{k,x}$ & $c_{k,y}$ & \quad &
+$k$ & Richtung & $c_{k,x}$ & $c_{k,y}$ \\
+\midrule
+0  & Ruhe & 0 & 0       &  & 9  & S   & 0 & $-256$ \\
+1  & N    & 0 & 256     &  & 10 & SSW & $-98$  & $-237$ \\
+2  & NNE  & 98 & 237    &  & 11 & SW  & $-181$ & $-181$ \\
+3  & NE   & 181 & 181   &  & 12 & WSW & $-237$ & $-98$ \\
+4  & ENE  & 237 & 98    &  & 13 & W   & $-256$ & 0 \\
+5  & E    & 256 & 0     &  & 14 & WNW & $-237$ & 98 \\
+6  & ESE  & 237 & $-98$ &  & 15 & NW  & $-181$ & 181 \\
+7  & SE   & 181 & $-181$&  & 16 & NNW & $-98$  & 237 \\
+8  & SSE  & 98 & $-237$ &  &    &     &        &     \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{remark}
+Die Werte $98 \approx 256\sin(22{,}5^\circ)$ und $237 \approx 256\cos(22{,}5^\circ)$
+sind dieselben Konstanten, die in DSM als Schwellwerte $\tau_1 = 0{,}199 \approx 51/256$
+und $\tau_2 = 0{,}668 \approx 171/256$ auftreten.
+Die Verbindung: $\sin(22{,}5^\circ)/\cos(22{,}5^\circ) = \tan(22{,}5^\circ) \approx \tau_1/\tau_2$ (bis auf Rundung).
+Der gesamte Compass16-Klassifikator aus DSM bleibt unver\"andert verwendbar.
+\end{remark}
+
+\begin{remark}[Antiparallelit\"at]
+F\"ur jeden Richtungsindex $k \in \{1,\ldots,16\}$ ist der antiparallele Index:
+\begin{equation}
+\bar{k} = ((k - 1 + 8) \bmod 16) + 1
+\end{equation}
+Es gilt: $\mathbf{c}_k + \mathbf{c}_{\bar{k}} = \mathbf{0}$. Dies ist die DSM-Antiparallelit\"at,
+die hier f\"ur die Hindernisbehandlung (Abschnitt~\ref{sec:bounce}) zentral wird.
+\end{remark}
+
+% ============================================================
+\section{Zustandsvektor und makroskopische Gr\"o\ss en}
+% ============================================================
+
+\begin{definition}[Agentenzustand]
+Jeder Agent $A$ speichert einen Verteilungsvektor:
+\begin{equation}
+\mathbf{f}^{(A)} = (f_0, f_1, f_2, \ldots, f_{16}) \in \mathbb{Z}_{\geq 0}^{17}
+\end{equation}
+Jeder Wert $f_k$ ist eine nicht-negative ganze Zahl und repr\"asentiert die
+\textit{Bewegungstendenz} des Agenten in Richtung $\mathbf{c}_k$.
+Ein hoher Wert $f_k$ bedeutet: Der Agent ``will'' sich stark in Richtung $k$ bewegen.
+\end{definition}
+
+\noindent Aus dem Verteilungsvektor leiten sich zwei makroskopische Gr\"o\ss en ab:
+
+\textbf{Aktivit\"atslevel} (Gesamtintensit\"at aller Bewegungstendenzen):
+\begin{equation}
+\rho = \sum_{k=0}^{16} f_k
+\end{equation}
+Im station\"aren Zustand gilt $\rho \approx \rho_0$ (Referenzwert, typisch $\rho_0 = 256$).
+
+\textbf{Bewegungsimpuls} (resultierende Richtung und Geschwindigkeit):
+\begin{equation}
+\mathbf{j} = \sum_{k=1}^{16} f_k \cdot \mathbf{c}_k
+\end{equation}
+Die mittlere Bewegungsrichtung ergibt sich als $\mathbf{u} = \mathbf{j} / \rho$.
+
+In Integer-Arithmetik:
+\begin{align}
+j_x &= \sum_{k=1}^{16} f_k \cdot c_{k,x} \label{eq:jx}\\
+j_y &= \sum_{k=1}^{16} f_k \cdot c_{k,y} \label{eq:jy}
+\end{align}
+Die Division $\mathbf{u} = \mathbf{j}/\rho$ wird durch Shift approximiert,
+wenn $\rho$ im station\"aren Zustand auf $\rho_0 = 256$ normiert bleibt.
+
+\textbf{Speicherbedarf pro Agent:} 17 Verteilungswerte $\times$ 16\,Bit = 34 Bytes.
+Dazu: 2 Positionskoordinaten $\times$ 16\,Bit = 4 Bytes.
+\textbf{Gesamt: 38 Bytes pro Agent.}
+
+% ============================================================
+\section{Gleichgewichtsverteilung}
+% ============================================================
+
+Die Gleichgewichtsverteilung $\feq_k$ beschreibt den Zustand, den ein Agent
+\textit{anstreben soll}. Die Relaxation (Abschnitt~\ref{sec:collision}) treibt
+den aktuellen Zustand $f_k$ kontinuierlich in Richtung $\feq_k$.
+
+\begin{definition}[Compass16-Gleichgewicht]\label{def:feq}
+\begin{equation}\label{eq:feq}
+\feq_k = w_k \cdot \Big(\rho + \kappa \cdot (\mathbf{c}_k \cdot \mathbf{u}_{\mathrm{target}})\Big)
+\end{equation}
+wobei:
+\begin{itemize}[itemsep=2pt]
+\item $w_k$ = Richtungsgewicht (bestimmt die Isotropie, siehe Abschnitt~\ref{sec:weights})
+\item $\rho$ = aktuelles Aktivit\"atslevel des Agenten
+\item $\kappa \in \mathbb{Z}_{>0}$ = \textbf{Reaktivit\"at} (ganzzahliger Steuerparameter)
+\item $\mathbf{u}_{\mathrm{target}}$ = \textbf{Sollbewegung} (zusammengesetzt aus Navigation, Separation, Koh\"asion)
+\end{itemize}
+\end{definition}
+
+\begin{remark}[Bedeutung der Reaktivit\"at $\kappa$]
+$\kappa$ steuert, wie stark die Sollbewegung $\mathbf{u}_{\mathrm{target}}$ die Verteilung beeinflusst:
+\begin{itemize}[itemsep=2pt]
+\item $\kappa = 1$: Minimale Reaktion. Agent \"andert seine Richtung nur z\"ogerlich.
+Geeignet f\"ur tr\"age, schwere Roboter.
+\item $\kappa = 4$: Moderate Reaktion. Guter Standardwert f\"ur Lagerroboter.
+\item $\kappa = 16$: Starke Reaktion. Agent folgt der Sollbewegung fast instantan.
+Geeignet f\"ur leichte, agile Einheiten.
+\end{itemize}
+Da $\kappa$ als Zweierpotenz gew\"ahlt werden kann ($1, 2, 4, 8, 16$),
+ist die Multiplikation $\kappa \cdot (\mathbf{c}_k \cdot \mathbf{u}_{\mathrm{target}})$
+als Links-Shift implementierbar: $\kappa = 2^n \;\Rightarrow\; \kappa \cdot x = x \ll n$.
+\end{remark}
+
+\subsection{Richtungsgewichte $w_k$}\label{sec:weights}
+
+Die Gewichte m\"ussen die Symmetriebedingungen
+$\sum w_k = 1$ und $\sum w_k c_{k,\alpha} c_{k,\beta} \propto \delta_{\alpha\beta}$
+erf\"ullen, damit keine Richtung bevorzugt wird.
+
+F\"ur 16 gleichm\"a\ss ig verteilte Richtungen plus Ruhe w\"ahlen wir:
+\begin{equation}
+w_k = \begin{cases}
+w_0 = 1 - 16\,w_r & k = 0 \quad \text{(Ruhe)} \\
+w_r = 1/24 & k = 1,\ldots,16 \quad \text{(alle Richtungen gleich)}
+\end{cases}
+\end{equation}
+
+Dies ergibt $w_0 = 1/3$ und $w_r = 1/24$.
+
+\textbf{Integer-Darstellung} mit Nenner-Skalierung $W = 768 = 3 \times 256$:
+\begin{equation}
+\hat{w}_0 = W \cdot w_0 = 256, \qquad \hat{w}_r = W \cdot w_r = 32
+\end{equation}
+Die Gleichgewichtsformel (\ref{eq:feq}) wird dann berechnet als:
+\begin{equation}
+\feq_k = \frac{\hat{w}_k \cdot \big(\rho + \kappa \cdot (\mathbf{c}_k \cdot \mathbf{u}_{\mathrm{target}}) \gg 8\big)}{W}
+\end{equation}
+wobei die Division durch $W = 768$ als $(\cdot \times 341) \gg 18$ approximiert werden kann
+(da $341/2^{18} \approx 1/768$). Alternativ: Lookup-Table f\"ur die 17 Produkte $\hat{w}_k / W$.
+
+\subsection{Sollbewegung $\mathbf{u}_{\mathrm{target}}$}
+
+Die Sollbewegung setzt sich aus drei Komponenten zusammen,
+die den Reynolds-Flocking-Regeln (1987) entsprechen:
+
+\begin{equation}\label{eq:utarget}
+\mathbf{u}_{\mathrm{target}} = \alpha\,\mathbf{u}_{\mathrm{Ziel}}
++ \beta\,\mathbf{u}_{\mathrm{Sep}}
++ \gamma\,\mathbf{u}_{\mathrm{Koh}}
+\end{equation}
+
+\textbf{(a) Navigation} (Attraktion zum Ziel):
+\begin{equation}
+\mathbf{u}_{\mathrm{Ziel}} = \mathbf{c}_{\kappa_Z}
+\quad\text{wobei}\quad
+\kappa_Z = \compass(\mathbf{x}_{\mathrm{Ziel}} - \mathbf{x}_A)
+\end{equation}
+Die Compass16-Klassifikation $\compass(\cdot)$ aus DSM: \textbf{keine Trigonometrie},
+nur Schwellwertvergleiche mit $\tau_1 = 51/256$ und $\tau_2 = 171/256$.
+
+\textbf{(b) Separation} (Absto\ss ung von zu nahen Nachbarn --- ``Gummiseil unter Druck''):
+\begin{equation}
+\mathbf{u}_{\mathrm{Sep}} = -\sum_{\substack{j \in \mathcal{N}(A) \\ d^2_j < d^2_{\min}}}
+\frac{d^2_{\min}}{d^2_j} \cdot \mathbf{c}_{\compass(\mathbf{x}_j - \mathbf{x}_A)}
+\end{equation}
+Je n\"aher der Nachbar ($d^2_j \to 0$), desto st\"arker die Absto\ss ung.
+Die Division $d^2_{\min}/d^2_j$ kann \"uber eine Lookup-Table (256 Eintr\"age, 512 Bytes ROM)
+oder st\"uckweise lineare Approximation realisiert werden.
+
+\textbf{(c) Koh\"asion} (Anziehung zu entfernten Nachbarn --- ``Gummiseil unter Zug''):
+\begin{equation}
+\mathbf{u}_{\mathrm{Koh}} = +\sum_{\substack{j \in \mathcal{N}(A) \\ d^2_j > d^2_{\max}}}
+\frac{d^2_j}{d^2_{\max}} \cdot \mathbf{c}_{\compass(\mathbf{x}_j - \mathbf{x}_A)}
+\end{equation}
+Je weiter der Nachbar ($d^2_j \gg d^2_{\max}$), desto st\"arker der Zug.
+
+Die Gewichte $\alpha, \beta, \gamma \in \mathbb{Z}$ sind ganzzahlige Steuerparameter.
+Sie werden als Zweierpotenzen gew\"ahlt, um Multiplikationen durch Shifts zu ersetzen:
+
+\begin{center}
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Parameter} & \textbf{Wert} & \textbf{Shift} & \textbf{Wirkung} \\
+\midrule
+$\alpha$ (Navigation) & 128 & $\ll 7$ & Zielgerichtete Bewegung \\
+$\beta$ (Separation) & 256 & $\ll 8$ & Kollisionsvermeidung (st\"arkster Term) \\
+$\gamma$ (Koh\"asion) & 64 & $\ll 6$ & Formationserhalt (schw\"achster Term) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Dass $\beta > \alpha > \gamma$ gew\"ahlt wird, spiegelt die Priorit\"at wider:
+Kollisionsvermeidung ist wichtiger als Zielnavigation, und Zielnavigation
+ist wichtiger als Formationserhalt. Dies ist eine bewusste Entwurfsentscheidung.
+
+% ============================================================
+\section{Relaxationsschritt}\label{sec:collision}
+% ============================================================
+
+Im Relaxationsschritt n\"ahert sich der aktuelle Verteilungsvektor
+dem Gleichgewicht an. Die Geschwindigkeit dieser Ann\"aherung
+bestimmt, wie ``tr\"age'' oder ``reaktiv'' der Agent sich bewegt.
+
+\begin{definition}[Integer-Relaxation (BGK-Schema)]
+\begin{equation}\label{eq:collision}
+f_k^* = f_k - \frac{\omega \cdot (f_k - \feq_k)}{S}
+\end{equation}
+wobei:
+\begin{itemize}[itemsep=2pt]
+\item $\omega \in \{1, \ldots, 256\}$ der ganzzahlige Relaxationsparameter ist,
+\item $S = 256$, sodass die Division als Rechts-Shift $\gg 8$ implementiert wird.
+\end{itemize}
+\end{definition}
+
+\begin{remark}[Physikalische Interpretation von $\omega$]~
+\begin{itemize}[itemsep=4pt]
+\item $\omega = 256$ ($= S$): \textbf{Sofortige Relaxation.}
+Agent springt in einem Schritt ins Gleichgewicht.
+Resultat: abrupte Richtungswechsel, ruckartige Bewegung.
+Analog zu einer d\"unnfl\"ussigen Substanz (Wasser).
+
+\item $\omega = 128$ ($= S/2$): \textbf{Halbe Relaxation pro Schritt.}
+Agent n\"ahert sich dem Gleichgewicht in $\sim 2$ Schritten.
+Resultat: glatte, flie\ss ende Bewegung. \textbf{Empfohlener Standardwert.}
+
+\item $\omega = 32$ ($= S/8$): \textbf{Langsame Relaxation.}
+Agent braucht $\sim 8$ Schritte f\"ur eine Richtungs\"anderung.
+Resultat: sehr tr\"age, vorausschaubare Bewegung.
+Analog zu einer dickfl\"ussigen Substanz (Honig).
+
+\item $\omega \to 0$: Keine Relaxation. Agent ignoriert das Gleichgewicht.
+Bewegung friert ein. \textbf{Nicht empfohlen} (f\"uhrt zu Deadlocks).
+\end{itemize}
+\end{remark}
+
+\begin{proposition}[Stabilit\"atsbedingung]
+F\"ur numerische Stabilit\"at muss gelten:
+\begin{equation}
+0 < \omega \leq 2S = 512
+\end{equation}
+Der stabile und praktisch sinnvolle Bereich ist $\mathbf{32 \leq \omega \leq 256}$.
+\end{proposition}
+
+\textbf{Implementierung:}
+\begin{algorithm}[H]
+\SetAlgoLined
+\KwIn{$f[0..16]$, $\feq[0..16]$, $\omega$}
+\KwOut{$f^*[0..16]$}
+\For{$k \leftarrow 0$ \KwTo $16$}{
+    $\Delta \leftarrow f[k] - \feq[k]$\;
+    $f^*[k] \leftarrow f[k] - (\omega \cdot \Delta) \gg 8$\;
+    \lIf{$f^*[k] < 0$}{$f^*[k] \leftarrow 0$} \tcp*{Nicht-Negativit\"at sicherstellen}
+}
+\caption{Integer-Relaxation (17 Subtraktionen + 17 Multiplikationen + 17 Shifts)}
+\end{algorithm}
+
+\textbf{Kosten:} $17 \times (1\text{ Sub} + 1\text{ Mul} + 1\text{ Shift} + 1\text{ Vgl}) = 68$ Integer-Zyklen pro Agent.
+
+% ============================================================
+\section{Positionsupdate (Streaming)}\label{sec:streaming}
+% ============================================================
+
+In der Fluid-LBM bewegen sich Verteilungswerte zu Nachbargitterpunkten.
+F\"ur Agenten im kontinuierlichen Raum gibt es kein Gitter.
+Stattdessen bestimmt der Verteilungsvektor nach der Relaxation
+die \textbf{Bewegungsrichtung und -geschwindigkeit} des Agenten:
+
+\begin{definition}[Positionsupdate]
+Der Bewegungsimpuls nach Relaxation ist:
+\begin{equation}
+\mathbf{j}^* = \sum_{k=1}^{16} f^*_k \cdot \mathbf{c}_k
+\end{equation}
+Die neue Position ergibt sich als:
+\begin{equation}
+\mathbf{x}_A(t+\Delta t) = \mathbf{x}_A(t) + \frac{\mathbf{j}^* \cdot \Delta t}{\rho \cdot S}
+\end{equation}
+\end{definition}
+
+In Integer-Arithmetik:
+\begin{align}
+j^*_x &= \sum_{k=1}^{16} f^*_k \cdot c_{k,x} \\
+j^*_y &= \sum_{k=1}^{16} f^*_k \cdot c_{k,y} \\
+x_{\mathrm{neu}} &= x_{\mathrm{alt}} + (j^*_x \cdot \Delta t) \gg 16 \label{eq:xneu}\\
+y_{\mathrm{neu}} &= y_{\mathrm{alt}} + (j^*_y \cdot \Delta t) \gg 16 \label{eq:yneu}
+\end{align}
+
+Der Shift $\gg 16$ in (\ref{eq:xneu})--(\ref{eq:yneu}) kombiniert die Division durch $\rho \approx 256$ ($\gg 8$)
+und durch $S = 256$ ($\gg 8$) in einer einzigen Operation.
+
+\textbf{Kosten:} $16 \times 2$ Multiplikationen + 2 Shifts + 2 Additionen = 36 Zyklen.
+
+% ============================================================
+\section{Hindernisbehandlung}\label{sec:bounce}
+% ============================================================
+
+In der LBM werden Wandrandbedingungen durch \textit{Bounce-Back} realisiert:
+Verteilungswerte, die auf ein Hindernis treffen, werden in die antiparallele Richtung reflektiert.
+Wir \"ubertragen dieses Prinzip direkt.
+
+\begin{definition}[Compass16-Bounce-Back]
+Wenn Agent $A$ ein Hindernis in Richtung $k$ detektiert:
+\begin{equation}
+f_k \leftrightarrow f_{\bar{k}}
+\end{equation}
+wobei $\bar{k} = ((k-1+8) \bmod 16) + 1$ der antiparallele Index ist (Abschnitt~2).
+\end{definition}
+
+\textbf{Hindernis-Detektion via DSM:} Ein Hindernis in Richtung $k$ liegt vor, wenn
+ein Objekt $j$ existiert mit:
+\begin{enumerate}[itemsep=2pt]
+\item $\compass(\mathbf{x}_j - \mathbf{x}_A) = k$ \quad (Objekt liegt in Richtung $k$)
+\item $d^2(\mathbf{x}_j, \mathbf{x}_A) < d^2_{\mathrm{sicher}}$ \quad (Objekt ist zu nah)
+\end{enumerate}
+Beide Bedingungen sind reine Integer-Operationen --- identisch zum DSM-Matching.
+
+\textbf{Unterscheidung statisch/dynamisch:}
+Statische Hindernisse (Regalw\"ande, Mauern) haben eine feste Position.
+Dynamische Hindernisse (andere Agenten) bewegen sich.
+Die Lighthouse-Signaturen aus DSM erm\"oglichen diese Unterscheidung:
+Statische Objekte haben konstante Lighthouse-Signaturen \"uber die Zeit,
+dynamische Objekte haben ver\"anderliche. Die Abfrage kostet 2 Integer-Vergleiche pro Leuchtturm.
+
+% ============================================================
+\section{Vollst\"andiger Algorithmus}
+% ============================================================
+
+\begin{algorithm}[H]
+\SetAlgoLined
+\KwIn{$N$ Agenten mit Positionen $\mathbf{x}^{(A)}$, Verteilungen $\mathbf{f}^{(A)}$, Zielen $\mathbf{x}^{(A)}_{\mathrm{Ziel}}$}
+\KwOut{Neue Positionen und Verteilungen}
+\BlankLine
+\ForEach{Agent $A$}{
+    \tcp{\textbf{Phase 1: Lokale Wahrnehmung} (DSM-Kern)}
+    \ForEach{Nachbar $j \in \mathcal{N}(A)$}{
+        $d^2_j \leftarrow (\Delta x)^2 + (\Delta y)^2$ \tcp*{5 Zyklen}
+        $\kappa_j \leftarrow \compass(\Delta x, \Delta y)$ \tcp*{12 Zyklen}
+    }
+    \BlankLine
+    \tcp{\textbf{Phase 2: Sollbewegung berechnen} (Gl.~\ref{eq:utarget})}
+    $\kappa_Z \leftarrow \compass(\mathbf{x}_{\mathrm{Ziel}} - \mathbf{x}_A)$\;
+    $u_x \leftarrow \alpha \cdot c_{\kappa_Z,x}
+    - \beta \cdot \sum_{j:\,d^2_j < d^2_{\min}} (d^2_{\min}/d^2_j) \cdot c_{\kappa_j,x}
+    + \gamma \cdot \sum_{j:\,d^2_j > d^2_{\max}} (d^2_j/d^2_{\max}) \cdot c_{\kappa_j,x}$\;
+    $u_y \leftarrow$ \text{analog f\"ur $y$-Komponente}\;
+    \BlankLine
+    \tcp{\textbf{Phase 3: Gleichgewicht berechnen} (Gl.~\ref{eq:feq})}
+    \For{$k \leftarrow 0$ \KwTo $16$}{
+        $\mathrm{dot}_k \leftarrow (c_{k,x} \cdot u_x + c_{k,y} \cdot u_y) \gg 8$\;
+        $\feq_k \leftarrow (\hat{w}_k \cdot (\rho + (\kappa \cdot \mathrm{dot}_k) \gg n_\kappa)) \;/\; W$\;
+    }
+    \BlankLine
+    \tcp{\textbf{Phase 4: Relaxation} (Gl.~\ref{eq:collision})}
+    \For{$k \leftarrow 0$ \KwTo $16$}{
+        $f^*_k \leftarrow f_k - (\omega \cdot (f_k - \feq_k)) \gg 8$\;
+        \lIf{$f^*_k < 0$}{$f^*_k \leftarrow 0$}
+    }
+    \BlankLine
+    \tcp{\textbf{Phase 5: Hindernisbehandlung} (Bounce-Back)}
+    \For{$k \leftarrow 1$ \KwTo $16$}{
+        \If{Hindernis in Richtung $k$ mit $d^2 < d^2_{\mathrm{sicher}}$}{
+            Tausche $f^*_k \leftrightarrow f^*_{\bar{k}}$\;
+        }
+    }
+    \BlankLine
+    \tcp{\textbf{Phase 6: Positionsupdate}}
+    $j^*_x \leftarrow \sum_k f^*_k \cdot c_{k,x}$; \quad
+    $j^*_y \leftarrow \sum_k f^*_k \cdot c_{k,y}$\;
+    $x_{\mathrm{neu}} \leftarrow x_{\mathrm{alt}} + (j^*_x \cdot \Delta t) \gg 16$\;
+    $y_{\mathrm{neu}} \leftarrow y_{\mathrm{alt}} + (j^*_y \cdot \Delta t) \gg 16$\;
+}
+\caption{Compass16-LBM: Vollst\"andiger Zeitschritt}
+\end{algorithm}
+
+% ============================================================
+\section{Kostenanalyse}
+% ============================================================
+
+\begin{center}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Phase} & \textbf{Operationen} & \textbf{Zyklen/Agent} & \textbf{FP-Ops} \\
+\midrule
+1. Wahrnehmung ($k{=}3$ Nachbarn) & $3 \times 17$ & $51$ & 0 \\
+2. Sollbewegung & $3 + 2k$ Mul/Add & $\sim 20$ & 0 \\
+3. Gleichgewicht (17 Werte) & $17 \times 5$ & $85$ & 0 \\
+4. Relaxation (17 Werte) & $17 \times 4$ & $68$ & 0 \\
+5. Hindernisbehandlung & $\leq 16$ Swaps & $\leq 16$ & 0 \\
+6. Positionsupdate & $16 \times 2 + 4$ & $36$ & 0 \\
+\midrule
+\textbf{Gesamt pro Agent pro Zeitschritt} & & $\mathbf{\sim 276}$ & $\mathbf{0}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent Hochrechnungen f\"ur ATmega328 (16\,MHz, 1 Zyklus = 62{,}5\,ns):
+
+\begin{center}
+\begin{tabular}{@{}rrrl@{}}
+\toprule
+$N$ (Agenten) & Zyklen/Schritt & Zeit/Schritt & Update-Rate \\
+\midrule
+10 & 2\,760 & 0{,}17\,ms & $>$1000\,Hz \\
+100 & 27\,600 & 1{,}7\,ms & $\sim$580\,Hz \\
+500 & 138\,000 & 8{,}6\,ms & $\sim$116\,Hz \\
+1\,000 & 276\,000 & 17{,}3\,ms & $\sim$58\,Hz \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Zum Vergleich: Ein Reynolds-Flocking-Algorithmus mit $\sqrt{\cdot}$ und $\arctan$
+ben\"otigt $\sim$2\,000--3\,000 Zyklen/Agent auf derselben Hardware ($\sim$8--10$\times$ langsamer).
+
+% ============================================================
+\section{Parameterempfehlungen}
+% ============================================================
+
+\begin{center}
+\begin{tabular}{@{}lllp{5.5cm}@{}}
+\toprule
+\textbf{Parameter} & \textbf{Symbol} & \textbf{Empfehlung} & \textbf{Bedeutung} \\
+\midrule
+Skalierung & $S$ & 256 & Festkomma-Aufl\"osung (Shift-kompatibel) \\
+Reaktivit\"at & $\kappa$ & 4 & Wie stark beeinflusst die Sollbewegung das Gleichgewicht \\
+Relaxation & $\omega$ & 128 & Gl\"atte der Richtungs\"anderung \\
+Navigation & $\alpha$ & 128 & St\"arke der Zielnavigation \\
+Separation & $\beta$ & 256 & St\"arke der Kollisionsvermeidung \\
+Koh\"asion & $\gamma$ & 64 & St\"arke des Formationserhalts \\
+Sicherheitsabstand$^2$ & $d^2_{\min}$ & 400 & Minimaler Abstand ($\approx$20 Einheiten) \\
+Koh\"asionsabstand$^2$ & $d^2_{\max}$ & 10\,000 & Maximaler Abstand ($\approx$100 Einheiten) \\
+Leuchtturm-Anzahl & $m$ & 3 & Globale Referenzpunkte \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Alle Parameter sind Zweierpotenzen oder lassen sich als solche w\"ahlen,
+sodass Multiplikationen konsequent durch Shift-Operationen ersetzt werden k\"onnen.
+
+% ============================================================
+\section{Emergente Eigenschaften}
+% ============================================================
+
+Durch die LBM-Struktur ergeben sich folgende Verhaltensweisen \textit{emergent}
+--- sie werden nicht explizit programmiert, sondern entstehen aus den lokalen Regeln:
+
+\textbf{1. Flie\ss verhalten um Hindernisse.}
+Bei $\omega \approx 128$ und $\beta > \alpha$ weichen Agenten
+Hindernissen aus wie eine Fl\"ussigkeit, die um einen Stein flie\ss t.
+Die Verteilungswerte verteilen sich automatisch auf die freien Compass-Sektoren.
+Es muss kein Ausweichpfad berechnet werden --- er ergibt sich aus der Relaxation.
+
+\textbf{2. Automatischer Abstandsausgleich.}
+Hohe lokale Agentendichte erzeugt starke Separationsbeitr\"age,
+die Agenten auseinandertreiben.
+Niedrige Dichte erzeugt Koh\"asionsbeitr\"age, die Agenten zusammenziehen.
+Der Gleichgewichtsabstand stellt sich selbstorganisiert ein.
+
+\textbf{3. Geordneter Gegenverkehr in Engstellen.}
+Bei schmalen Passagen (z.B.\ Lagergassen) erzeugt der Bounce-Back
+an den W\"anden eine asymmetrische Verteilung,
+die nat\"urlichen Gegenverkehr mit impliziter Spurbildung hervorbringt.
+
+\textbf{4. Deadlock-Freiheit.}
+Die Ruhe-Verteilung $f_0$ wird durch die Relaxation
+st\"andig zum Gleichgewicht gezogen.
+Da das Gleichgewicht stets eine Zielrichtung enth\"alt ($\mathbf{u}_{\mathrm{Ziel}} \neq \mathbf{0}$,
+solange das Ziel nicht erreicht ist),
+kann kein Agent dauerhaft stehen bleiben. Das System bewegt sich immer.
+
+\textbf{5. Gummiseil-Verhalten.}
+Die Kombination aus Separation ($d^2 < d^2_{\min}$: Absto\ss ung)
+und Koh\"asion ($d^2 > d^2_{\max}$: Anziehung)
+mit stetigem \"Ubergang erzeugt das ``virtuelle Gummiseil'':
+Agenten werden bei \"Uberdehnung angezogen und bei Kompression abgesto\ss en,
+mit einer ``Ruhelänge'' im Bereich $[d^2_{\min}, d^2_{\max}]$.
+
+% ============================================================
+\section{Offene Fragen}
+% ============================================================
+
+\begin{enumerate}[itemsep=4pt]
+\item \textbf{Isotropie der Gewichte.}
+Die einfache Wahl $w_r = 1/24$ f\"ur alle 16 Richtungen
+ist eine N\"aherung erster Ordnung.
+Exakte Isotropie 5.\ Ordnung erfordert m\"oglicherweise
+unterschiedliche Gewichte f\"ur die drei Geschwindigkeitsklassen
+(Kardinal: $|\mathbf{c}| = 256$, Diagonal: $|\mathbf{c}| = 362$, Zwischenrichtungen: $|\mathbf{c}| = 256$).
+Numerische Validierung durch Simulation steht aus.
+
+\item \textbf{Integer-Division in der Separation.}
+Die Division $d^2_{\min}/d^2_j$ ist nicht direkt als Shift darstellbar.
+Drei L\"osungsans\"atze:
+(a)~Lookup-Table f\"ur $256/d^2$ (256 Eintr\"age, 512 Bytes ROM),
+(b)~st\"uckweise lineare Approximation in 4 Segmenten,
+(c)~Ersetzen durch $(d^2_{\min} - d^2_j)$ (lineare statt inverse Absto\ss ung).
+Option (c) eliminiert die Division vollst\"andig, \"andert aber das Absto\ss ungsprofil.
+
+\item \textbf{3D-Erweiterung.}
+F\"ur fliegende Agenten (Drohnen) wird eine sph\"arische Kompassrose ben\"otigt.
+M\"ogliche Ans\"atze: Compass16 $\times$ 5 Elevationsklassen = 80+1 Richtungen (162 Bytes/Agent),
+oder Compass32 $\times$ 3 Elevationsklassen = 96+1 Richtungen (194 Bytes/Agent).
+Machbar auf 32-Bit-MCUs, eng auf 8-Bit-Systemen.
+
+\item \textbf{Stabilit\"atsanalyse.}
+Unter welchen Bedingungen konvergiert das System zu einer stabilen Formation?
+Die LBM-Theorie bietet hierf\"ur analytische Werkzeuge
+(Chapman-Enskog-Entwicklung), die auf das Schwarmmodell \"ubertragbar sein k\"onnten.
+Eine rigorose Analyse steht aus.
+
+\item \textbf{Validierung gegen Baselines.}
+Vergleich mit: (a)~Standard-Reynolds-Flocking (mit FPU),
+(b)~ORCA (Optimal Reciprocal Collision Avoidance),
+(c)~zentralisiertem MAPF (CBS-Algorithmus).
+Metriken: Kollisionsrate, mittlere Ankunftszeit, Zyklen pro Zeitschritt.
+\end{enumerate}
+
+% ============================================================
+\section*{Referenzen}
+% ============================================================
+
+\begin{itemize}[itemsep=2pt,leftmargin=*]
+\item Balban, D. (2026). \textit{Trigonometry-Free TSP Heuristics for Embedded Systems:
+A Compass-Based Matching Approach.} Working Paper. DOI: 10.5281/zenodo.19096781.
+\item Bhatnagar, P.L., Gross, E.P., Krook, M. (1954). \textit{A model for collision processes
+in gases.} Physical Review, 94(3), 511--525.
+\item Reynolds, C.W. (1987). \textit{Flocks, herds and schools: A distributed behavioral model.}
+SIGGRAPH Computer Graphics, 21(4), 25--34.
+\item Qian, Y.H., d'Humi\`eres, D., Lallemand, P. (1992). \textit{Lattice BGK models
+for Navier-Stokes equation.} Europhysics Letters, 17(6), 479--484.
+\item van den Berg, J., et al. (2011). \textit{Reciprocal n-Body Collision Avoidance.}
+Robotics Research, STAR 70, 3--19.
+\item Sharon, G., et al. (2015). \textit{Conflict-Based Search for Optimal Multi-Agent Pathfinding.}
+Artificial Intelligence, 219, 40--66.
+\end{itemize}
+
+\end{document}

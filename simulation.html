@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="Dogan Balban">
+<meta name="description" content="Compass16-LBM — Lattice-Boltzmann-inspired swarm coordination with integer compass discretization. Independent research by Dogan Balban (2026).">
+<title>Compass16-LBM · Schwarmkoordination · Balban 2026</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=DM+Sans:wght@300;400;500;700&display=swap');
+:root{--bg:#080c14;--bg2:#0f1623;--bg3:#182035;--acc:#38bdf8;--acc2:#f472b6;--acc3:#34d399;--warn:#fbbf24;--red:#ef4444;--ora:#f97316;--text:#e2e8f0;--dim:#64748b;--brd:#1e293b}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;overflow:hidden;height:100vh;display:flex}
+#side{width:300px;min-width:300px;background:var(--bg2);border-right:1px solid var(--brd);padding:14px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;font-size:12px}
+#side h1{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--acc);letter-spacing:1px;text-transform:uppercase;padding-bottom:8px;border-bottom:1px solid var(--brd)}
+#side h1 span{color:var(--acc2)}
+.st{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;color:var(--dim);letter-spacing:2px;text-transform:uppercase;margin-top:4px}
+.pr{display:flex;align-items:center;gap:6px}
+.pr label{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dim);min-width:22px}
+.pr input[type=range]{flex:1;-webkit-appearance:none;height:3px;background:var(--bg3);border-radius:2px;outline:none}
+.pr input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;background:var(--acc);border-radius:50%;cursor:pointer}
+.pv{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--acc);min-width:30px;text-align:right}
+.br{display:flex;gap:6px;flex-wrap:wrap}
+button{font-family:'JetBrains Mono',monospace;font-size:10px;padding:5px 10px;border:1px solid var(--brd);background:var(--bg3);color:var(--text);border-radius:3px;cursor:pointer;transition:all .15s}
+button:hover{background:var(--acc);color:var(--bg);border-color:var(--acc)}
+button.active{background:var(--acc);color:var(--bg)}
+.stats{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);line-height:1.7;background:var(--bg);padding:8px 10px;border-radius:3px;border:1px solid var(--brd)}
+.stats .v{color:var(--acc)}.stats .v2{color:var(--acc3)}.stats .vr{color:var(--red)}.stats .vo{color:var(--ora)}.stats .vw{color:var(--warn)}
+.cb{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);cursor:pointer}
+.cb input{accent-color:var(--acc);cursor:pointer}
+.sep{height:1px;background:var(--brd);margin:2px 0}
+.legend{display:flex;flex-wrap:wrap;gap:6px;font-size:9px}
+.li{display:flex;align-items:center;gap:3px}
+.ld{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+#cw{flex:1;position:relative;overflow:hidden;cursor:crosshair}
+#cw.draw-mode{cursor:none}
+#drawCursor{position:absolute;pointer-events:none;border-radius:50%;border:2px solid #f97316;display:none;transform:translate(-50%,-50%)}
+canvas{display:block;width:100%;height:100%}
+#ov{position:absolute;top:10px;right:12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:#2a3450;pointer-events:none;text-align:right;line-height:1.5}
+#toast{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-family:'JetBrains Mono',monospace;font-size:18px;color:var(--warn);pointer-events:none;opacity:0;transition:opacity 0.3s}
+#scoreboard{position:absolute;bottom:10px;right:12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);background:rgba(8,12,20,0.85);border:1px solid var(--brd);border-radius:4px;padding:8px 10px;pointer-events:none;min-width:180px;line-height:1.6}
+#scoreboard .sh{color:var(--acc);font-weight:600;font-size:9px;letter-spacing:1px;text-transform:uppercase;margin-bottom:3px}
+#scoreboard .sr{display:flex;justify-content:space-between;gap:8px}
+#scoreboard .sn{font-weight:600}
+#scoreboard .sp{color:var(--acc3)}
+#scoreboard .sd{color:var(--dim);font-size:8px}
+#fps{position:absolute;top:10px;left:12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);background:rgba(8,12,20,0.6);border:1px solid var(--brd);border-radius:3px;padding:4px 8px;pointer-events:none}
+#fps .v{color:var(--acc3)}
+#credit{position:absolute;bottom:10px;left:12px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--dim);pointer-events:auto;letter-spacing:1px}
+#credit a{color:var(--acc);text-decoration:none;border-bottom:1px dotted var(--acc)}
+#credit a:hover{color:var(--acc2)}
+#help-btn{position:absolute;top:10px;left:80px;width:24px;height:24px;border-radius:50%;background:var(--bg2);border:1px solid var(--brd);color:var(--acc);font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
+#help-btn:hover{background:var(--acc);color:var(--bg);border-color:var(--acc)}
+#help{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(8,12,20,0.92);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:100;font-family:'JetBrains Mono',monospace}
+#help.open{display:flex}
+#help .panel{background:var(--bg2);border:1px solid var(--brd);border-radius:6px;padding:24px 28px;max-width:560px;color:var(--text);font-size:11px;line-height:1.8;max-height:80vh;overflow-y:auto}
+#help h2{font-size:14px;color:var(--acc);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;border-bottom:1px solid var(--brd);padding-bottom:8px}
+#help h3{font-size:11px;color:var(--acc2);letter-spacing:1px;text-transform:uppercase;margin-top:14px;margin-bottom:4px}
+#help kbd{display:inline-block;background:var(--bg3);border:1px solid var(--brd);border-radius:3px;padding:1px 6px;font-size:10px;color:var(--acc3);margin-right:4px;min-width:14px;text-align:center}
+#help .row{display:flex;gap:12px;margin-bottom:3px}
+#help .row .k{min-width:80px}
+#help .close{position:absolute;top:14px;right:18px;background:none;border:none;color:var(--dim);font-size:18px;cursor:pointer;padding:0;line-height:1}
+#help .close:hover{color:var(--red)}
+</style>
+</head>
+<body>
+<div id="side">
+<h1>C16-LBM <span>v7 Stationen</span></h1>
+
+<div class="st">Roboter-Physik (12 Roboter)</div>
+<div class="pr"><label>r</label><input type="range" id="pR" min="12" max="35" value="16" step="1"><span class="pv" id="vR">16</span></div>
+<div class="pr"><label>v</label><input type="range" id="pV" min="1" max="10" value="4" step="1"><span class="pv" id="vV">4</span></div>
+<div class="pr"><label>a</label><input type="range" id="pA" min="1" max="6" value="2" step="1"><span class="pv" id="vA2">2</span></div>
+<div class="pr"><label>t<sub>r</sub></label><input type="range" id="pTr" min="1" max="8" value="3" step="1"><span class="pv" id="vTr">3</span></div>
+
+<div class="sep"></div>
+<div class="st">LBM Fluid-Dynamik</div>
+<div class="pr"><label title="Reaktivität">κ</label><input type="range" id="pKappa" min="0" max="5" value="2" step="1"><span class="pv" id="vKappa">4</span></div>
+<div class="pr"><label title="Relaxation (Trägheit)">ω</label><input type="range" id="pOmega" min="16" max="256" value="128" step="8"><span class="pv" id="vOmega">128</span></div>
+<div class="pr"><label title="Zielanziehung">α</label><input type="range" id="pAlpha" min="0" max="512" value="144" step="8"><span class="pv" id="vAlpha">144</span></div>
+<div class="pr"><label title="Separation (↓ = dichter fließen)">β</label><input type="range" id="pBeta" min="0" max="512" value="160" step="8"><span class="pv" id="vBeta">160</span></div>
+<div class="pr"><label title="Kohäsion (Schwarm-Zusammenhalt)">γ</label><input type="range" id="pGamma" min="0" max="512" value="96" step="8"><span class="pv" id="vGamma">96</span></div>
+<div style="font-size:8px;color:var(--dim);line-height:1.3;margin-top:2px">
+ω↓ = träge · β↓ = dichter · γ↑ = Schwarm
+</div>
+
+<div class="sep"></div>
+<div class="st">Anzeige</div>
+<label class="cb"><input type="checkbox" id="showZones"> Zonen-Ringe</label>
+<label class="cb"><input type="checkbox" id="showNB" checked> 3-Nachbar Kompass</label>
+<label class="cb"><input type="checkbox" id="showSteer" checked> Steuerrichtung</label>
+<label class="cb"><input type="checkbox" id="showBlocked" checked> Blockierte Sektoren</label>
+<label class="cb"><input type="checkbox" id="showMatch" checked> Matched Paare</label>
+<label class="cb"><input type="checkbox" id="showLabels" checked> Roboter-IDs</label>
+<label class="cb"><input type="checkbox" id="showLH" checked> Leuchttürme</label>
+<label class="cb"><input type="checkbox" id="showLHdir"> Leuchtturm-Zeiger</label>
+<label class="cb"><input type="checkbox" id="showTrails"> Spuren</label>
+<label class="cb"><input type="checkbox" id="pheroOn" checked> 🐜 Pheromone aktiv</label>
+<label class="cb"><input type="checkbox" id="showPhero"> Pheromon-Spuren zeigen</label>
+
+<div class="sep"></div>
+<div class="br">
+<button onclick="scenario('wall')">Wand</button>
+<button onclick="scenario('open')">Offen</button>
+<button onclick="scenario('maze')">Labyrinth</button>
+<button onclick="scenario('maze2')">Labyrinth 2</button>
+<button onclick="scenario('maze3')">Labyrinth 3</button>
+</div>
+<div class="br">
+<button id="btnP" onclick="togglePause()">⏸ Pause</button>
+<button onclick="resetSim()">↺ Reset</button>
+</div>
+<div class="sep"></div>
+<div class="st">Zeichnen</div>
+<div class="br">
+<button id="btnDraw" onclick="toggleDraw()">✏️ Wände</button>
+<button id="btnStation" onclick="toggleStation()">📍 Station</button>
+<button id="btnErase" onclick="toggleErase()">🧹 Radierer</button>
+<button onclick="clearDrawn()">🗑 Alles löschen</button>
+</div>
+<div style="font-size:9px;color:var(--dim);line-height:1.4;margin-top:2px">
+Modus wählen, dann auf Canvas zeichnen.<br>
+Radierer entfernt Hindernisse unter dem Cursor.
+</div>
+
+<div class="sep"></div>
+<div class="st">Zonen (aus Physik)</div>
+<div class="stats" id="zoneInfo">—</div>
+
+<div class="sep"></div>
+<div class="st">Hinweis</div>
+<div style="font-size:10px;color:var(--dim);line-height:1.5">
+<span style="color:#f472b6">■</span> Roboter <b>M</b> = Maus-gesteuert.<br>
+Roboter fahren Stationen ab:<br>
+🔧 Werkzeug · 📦 Lager · ⚡ Laden<br>
+⚙️ Montage · 📤 Abgabe<br>
+<span style="color:#fbbf24">■</span> = Wandfolge (Bug-Alg.)<br>
+<span style="color:#34d399">◉</span> = Docking (Fortschrittsring)
+</div>
+
+<div class="sep"></div>
+<div class="st">Live-Aufträge</div>
+<div class="stats" id="taskLog" style="max-height:140px;overflow-y:auto;font-size:9px;line-height:1.6">—</div>
+
+<div class="sep"></div>
+<div class="st">Legende</div>
+<div class="legend">
+<div class="li"><div class="ld" style="background:#ef4444"></div>Z0</div>
+<div class="li"><div class="ld" style="background:#f97316"></div>Z1</div>
+<div class="li"><div class="ld" style="background:#fbbf24"></div>Z2</div>
+<div class="li"><div class="ld" style="background:#34d399"></div>Z3</div>
+<div class="li"><div class="ld" style="background:#38bdf8"></div>Z4</div>
+<div class="li"><div class="ld" style="background:#818cf8"></div>Z5</div>
+</div>
+
+<div class="sep"></div>
+<div class="stats" id="stats">—</div>
+</div>
+
+<div id="cw">
+<canvas id="canvas"></canvas>
+<div id="drawCursor"></div>
+<div id="ov">C16-LBM v7 · Stationen + Labyrinth<br>Balban 2026</div>
+<div id="fps">FPS <span class="v" id="fpsV">--</span> · step <span class="v" id="stepV">--</span> ms</div>
+<button id="help-btn" onclick="toggleHelp()" title="Hilfe (?)">?</button>
+<div id="toast"></div>
+<div id="scoreboard"><div class="sh">Punkte</div><div id="sbBody">—</div></div>
+<div id="credit">© Dogan Balban 2026 · <a href="https://github.com/dogan1908" target="_blank">github.com/dogan1908</a> · ORCID 0009-0002-5052-6951</div>
+<div id="help">
+  <div class="panel">
+    <button class="close" onclick="toggleHelp()">×</button>
+    <h2>Compass16-LBM · Bedienung</h2>
+    <h3>Tastatur</h3>
+    <div class="row"><span class="k"><kbd>Space</kbd></span><span>Pause / Play</span></div>
+    <div class="row"><span class="k"><kbd>R</kbd></span><span>Szenario zurücksetzen</span></div>
+    <div class="row"><span class="k"><kbd>1</kbd>–<kbd>5</kbd></span><span>Szenarien wechseln (Wand · Offen · Labyrinth 1–3)</span></div>
+    <div class="row"><span class="k"><kbd>D</kbd></span><span>Wände zeichnen umschalten</span></div>
+    <div class="row"><span class="k"><kbd>S</kbd></span><span>Station setzen umschalten</span></div>
+    <div class="row"><span class="k"><kbd>E</kbd></span><span>Radierer umschalten</span></div>
+    <div class="row"><span class="k"><kbd>C</kbd></span><span>Gezeichnete Wände löschen</span></div>
+    <div class="row"><span class="k"><kbd>?</kbd> / <kbd>H</kbd></span><span>Diese Hilfe ein-/ausblenden</span></div>
+    <h3>Maus</h3>
+    <div class="row"><span class="k">Roboter ✦</span><span>Klicken &amp; Ziehen → Maus-Roboter steuern</span></div>
+    <div class="row"><span class="k">Andere</span><span>Klicken &amp; Ziehen → temporär verschieben (LBM pausiert)</span></div>
+    <h3>Fluiddynamik · LBM-Parameter</h3>
+    <div class="row"><span class="k">κ Reaktivität</span><span>Wie schnell folgt der Agent dem Sollziel? Höher = agiler.</span></div>
+    <div class="row"><span class="k">ω Relaxation</span><span>Trägheit der Richtungsänderung. Klein = honigartig, groß = wasserartig.</span></div>
+    <div class="row"><span class="k">α Navigation</span><span>Stärke der Zielanziehung.</span></div>
+    <div class="row"><span class="k">β Separation</span><span>Kollisionsvermeidung. Kleiner = dichter Schwarm.</span></div>
+    <div class="row"><span class="k">γ Kohäsion</span><span>Schwarm-Zusammenhalt.</span></div>
+    <h3>Stationen</h3>
+    <div class="row"><span class="k">🔧 📦 ⚡ ⚙️ 📤</span><span>Roboter pendeln zwischen den Stationen, Punkte pro Docking.</span></div>
+    <div class="row"><span class="k">🐜 Pheromone</span><span>Optionaler ACO-artiger Lernpfad — Trampelpfade entstehen emergent.</span></div>
+  </div>
+</div>
+</div>
+
+<script>
+const S=256, N_ROBOTS=12, ARRIVE_DIST=36, DOCK_TIME=60;
+const C16=[{x:0,y:0},{x:0,y:-256},{x:98,y:-237},{x:181,y:-181},{x:237,y:-98},{x:256,y:0},{x:237,y:98},{x:181,y:181},{x:98,y:237},{x:0,y:256},{x:-98,y:237},{x:-181,y:181},{x:-237,y:98},{x:-256,y:0},{x:-237,y:-98},{x:-181,y:-181},{x:-98,y:-237}];
+const DN=['·','N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+const ZC=['#ef4444','#f97316','#fbbf24','#34d399','#38bdf8','#818cf8'];
+const ZN=['KOLL','NOT','AUSW','KOMF','NEUT','FERN'];
+const ROBOT_COLORS=['#38bdf8','#34d399','#fbbf24','#f97316','#a78bfa','#fb7185','#2dd4bf','#e879f9','#84cc16','#60a5fa','#f43f5e','#facc15'];
+const ROBOT_NAMES=['A','B','C','D','E','F','G','H','I','J','K','✦'];
+
+// Station types
+const STATION_TYPES=[
+  {name:'Werkzeug',icon:'🔧',color:'#f472b6',dockTime:50},
+  {name:'Lager',icon:'📦',color:'#38bdf8',dockTime:40},
+  {name:'Aufladen',icon:'⚡',color:'#fbbf24',dockTime:70},
+  {name:'Montage',icon:'⚙️',color:'#34d399',dockTime:55},
+  {name:'Abgabe',icon:'📤',color:'#a78bfa',dockTime:35},
+];
+
+let stations=[];  // {x,y,type,capacity,dockedAgents[]}
+
+// === PHEROMONE GRID ===
+const PCELL=20;  // pheromone cell size in pixels
+let pheroW=0,pheroH=0; // grid dimensions
+let pheroGrid=null;     // Float32Array: [cellIdx * maxStations + stationIdx] = {dir:0-16, str:0-255}
+const PHERO_EVAP=0.985; // evaporation rate per frame (0.985 = ~1.5% decay)
+const PHERO_DEPOSIT=120;  // strength deposited per frame (was 80)
+const PHERO_MAX=255;
+const MAX_STATIONS=10;   // max tracked stations for pheromone
+
+function initPheroGrid(){
+  pheroW=Math.ceil(WC/PCELL);
+  pheroH=Math.ceil(HC/PCELL);
+  // Each cell stores dir (uint8) + strength (float) per station
+  // Packed as: pheroDir[cell*MAX_STATIONS+si], pheroStr[cell*MAX_STATIONS+si]
+  pheroGrid={
+    dir:new Uint8Array(pheroW*pheroH*MAX_STATIONS),   // compass16 direction (0=none,1-16)
+    str:new Float32Array(pheroW*pheroH*MAX_STATIONS),  // strength 0-255
+  };
+}
+
+function pheroCell(x,y){
+  const gx=Math.floor(x/PCELL),gy=Math.floor(y/PCELL);
+  if(gx<0||gx>=pheroW||gy<0||gy>=pheroH)return-1;
+  return gy*pheroW+gx;
+}
+
+function pheroDeposit(x,y,stationIdx,compassDir){
+  if(!pheroGrid||stationIdx<0||stationIdx>=MAX_STATIONS||compassDir<1)return;
+  const ci=pheroCell(x,y);
+  if(ci<0)return;
+  const pi=ci*MAX_STATIONS+stationIdx;
+  const oldStr=pheroGrid.str[pi];
+  const oldDir=pheroGrid.dir[pi];
+  if(oldStr<5||oldDir===0){
+    // Empty cell: just write
+    pheroGrid.dir[pi]=compassDir;
+    pheroGrid.str[pi]=Math.min(oldStr+PHERO_DEPOSIT,PHERO_MAX);
+  }else{
+    // Blend directions: if same quadrant, reinforce; if different, weaken old
+    const diff=Math.abs(((compassDir-1)-(oldDir-1)+8)%16-8);
+    if(diff<=2){
+      // Similar direction: reinforce
+      pheroGrid.dir[pi]=compassDir; // latest direction wins
+      pheroGrid.str[pi]=Math.min(oldStr+PHERO_DEPOSIT*0.5,PHERO_MAX);
+    }else{
+      // Conflicting direction: weaken, then overwrite if new is stronger
+      pheroGrid.str[pi]=oldStr*0.7;
+      if(PHERO_DEPOSIT>pheroGrid.str[pi]){
+        pheroGrid.dir[pi]=compassDir;
+        pheroGrid.str[pi]=PHERO_DEPOSIT;
+      }
+    }
+  }
+}
+
+function pheroRead(x,y,stationIdx){
+  if(!pheroGrid||stationIdx<0||stationIdx>=MAX_STATIONS)return{dir:0,str:0};
+  const ci=pheroCell(x,y);
+  if(ci<0)return{dir:0,str:0};
+  const pi=ci*MAX_STATIONS+stationIdx;
+  return{dir:pheroGrid.dir[pi],str:pheroGrid.str[pi]};
+}
+
+function pheroEvaporate(){
+  if(!pheroGrid)return;
+  const n=pheroGrid.str.length;
+  for(let i=0;i<n;i++){
+    pheroGrid.str[i]*=PHERO_EVAP;
+    if(pheroGrid.str[i]<1){pheroGrid.str[i]=0;pheroGrid.dir[i]=0;}
+  }
+}
+
+function createStation(x,y,typeIdx,cap){
+  return{x,y,type:typeIdx,capacity:cap||2,docked:[],queue:[]};
+} // M = mouse
+
+function anti(k){return k===0?0:((k-1+8)%16)+1;}
+function compass16(dx,dy){
+  const ax=Math.abs(dx),ay=Math.abs(dy);let s;
+  if(ay>=ax){const t1=(ay*51)>>8,t2=(ay*171)>>8;s=ax<t1?0:ax<t2?1:2;}
+  else{const t1=(ax*51)>>8,t2=(ax*171)>>8;s=ay<t1?4:ay<t2?3:2;}
+  // Screen coords: dy<0=up=north, dy>=0=down=south
+  // Each quadrant maps s=[0,1,2,3,4] to 5 successive compass directions:
+  // s=0 cardinal-vertical · s=1 NN-leaning · s=2 diagonal · s=3 EE-leaning · s=4 cardinal-horizontal
+  if(dx>=0&&dy<0)return[1,2,3,4,5][s];       // NE quadrant: N, NNE, NE, ENE, E
+  if(dx>=0&&dy>=0)return[9,8,7,6,5][s];      // SE quadrant: S, SSE, SE, ESE, E
+  if(dx<0&&dy<0)return[1,16,15,14,13][s];    // NW quadrant: N, NNW, NW, WNW, W
+  return[9,10,11,12,13][s];                  // SW quadrant: S, SSW, SW, WSW, W
+}
+
+let ZONES={d:[0,0,0,0,0,999999]};
+function computeZones(){
+  const r=+document.getElementById('pR').value,v=+document.getElementById('pV').value;
+  const a=+document.getElementById('pA').value,tr=+document.getElementById('pTr').value;
+  const br=v*v/(2*Math.max(a,0.5)),re=v*tr;
+  ZONES.d=[2*r, 2*r+br, 2*r+br+re, 2*r+3*(br+re), 2*r+6*(br+re), 999999];
+  document.getElementById('zoneInfo').innerHTML=ZONES.d.slice(0,5).map((d,i)=>
+    `<span style="color:${ZC[i]}">Z${i}</span> <span class="v">${d.toFixed(0)}px</span> ${ZN[i]}`).join('<br>');
+}
+function classifyZone(dist){for(let z=0;z<5;z++)if(dist<ZONES.d[z])return z;return dist<ZONES.d[4]?4:5;}
+
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+let WC,HC,agents=[],lighthouses=[],obstacles=[],targets=[],matchedPairs=[];
+let paused=false,frame=0;
+let trailCvs,trailCtx,curScenario='wall';
+let dragIdx=-1,mouseX=0,mouseY=0;
+let drawMode='none'; // 'none','draw','station','erase'
+let isDrawing=false;
+let drawnObsStart=0; // index where scenario obstacles end and drawn ones begin
+let nextStationType=0;
+
+function resize(){const w=document.getElementById('cw');WC=w.clientWidth;HC=w.clientHeight;canvas.width=WC;canvas.height=HC;if(trailCvs){trailCvs.width=WC;trailCvs.height=HC;}}
+function initTrails(){trailCvs=document.createElement('canvas');trailCvs.width=WC;trailCvs.height=HC;trailCtx=trailCvs.getContext('2d');}
+
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.opacity=1;setTimeout(()=>t.style.opacity=0,1500);}
+
+class Agent{
+  constructor(x,y,idx){
+    this.x=x;this.y=y;this.idx=idx;
+    this.tx=x;this.ty=y; // current target coords
+    this.isMouseControlled=(idx===N_ROBOTS-1);
+    this.f=new Int32Array(17);this.feq=new Int32Array(17);
+    this.f[0]=85;for(let k=1;k<=16;k++)this.f[k]=11;
+    this.prevX=x;this.prevY=y;
+    this.sensor=new Array(17);for(let k=0;k<=16;k++)this.sensor[k]={zone:5,dist:9999,idx:-1};
+    this.nb=[{k:0,zone:5,dist:9999,idx:-1},{k:0,zone:5,dist:9999,idx:-1},{k:0,zone:5,dist:9999,idx:-1}];
+    this.blocked=new Uint8Array(17);
+    this.compassDir=0;this.steerDir=0;this.matchedWith=-1;this.arrived=false;
+    // Stuck detection & wall-follow
+    this.bestD2=Infinity;
+    this.stuckTimer=0;
+    this.wallFollow=false;
+    this.wallFollowCW=1;
+    this.d2AtSwitch=Infinity;
+    this.backPressure=0;
+    this.mode='NAV';
+    // === Task system ===
+    this.targetStation=-1;    // index into stations[]
+    this.state='TRAVEL';      // TRAVEL → DOCK → next TRAVEL
+    this.dockTimer=0;         // countdown while docked
+    this.dockCooldown=0;      // frames after undocking where re-dock is blocked
+    this.score=0;             // completed tasks
+    this.taskLog=[];          // history: [{stationIdx, frame}]
+  }
+  rho(){let s=0;for(let k=0;k<=16;k++)s+=this.f[k];return Math.max(s,1);}
+  d2target(){const dx=this.tx-this.x,dy=this.ty-this.y;return dx*dx+dy*dy;}
+  assignStation(sIdx){
+    this.targetStation=sIdx;
+    this.tx=stations[sIdx].x;
+    this.ty=stations[sIdx].y;
+    this.state='TRAVEL';
+    this.wallFollow=false;this.stuckTimer=0;this.bestD2=Infinity;this.backPressure=0;this.mode='NAV';
+    this.arrived=false;
+  }
+}
+
+function assignNextStation(agent){
+  // Pick the station with the fewest robots heading to it (load balance)
+  // Exclude current station
+  let best=-1,bestLoad=Infinity;
+  for(let si=0;si<stations.length;si++){
+    if(si===agent.targetStation)continue;
+    const s=stations[si];
+    // Count agents heading to or docked at this station
+    let load=s.docked.length;
+    for(const a of agents){if(a!==agent&&a.targetStation===si&&a.state==='TRAVEL')load++;}
+    if(load<bestLoad||(load===bestLoad&&Math.random()<0.3)){bestLoad=load;best=si;}
+  }
+  if(best>=0)agent.assignStation(best);
+}
+
+
+// === WALL BUILDER HELPERS ===
+function wallH(x1,x2,y,sp){for(let x=x1;x<=x2;x+=sp||10)obstacles.push({x,y,r:8});}
+function wallV(y1,y2,x,sp){for(let y=y1;y<=y2;y+=sp||10)obstacles.push({x,y,r:8});}
+
+// Ensure station doesn't overlap any obstacle
+function safeStation(sx,sy,typeIdx,cap){
+  const minClear=50; // station must be at least this far from any obstacle center
+  let fx=sx,fy=sy;
+  for(let iter=0;iter<10;iter++){
+    let ok=true;
+    for(const obs of obstacles){
+      const dx=fx-obs.x,dy=fy-obs.y,d=Math.sqrt(dx*dx+dy*dy);
+      if(d<minClear){
+        // Push away from obstacle
+        if(d>0.1){fx+=dx/d*(minClear-d+5);fy+=dy/d*(minClear-d+5);}
+        else{fx+=minClear;} // degenerate case
+        ok=false;
+      }
+    }
+    if(ok)break;
+  }
+  // Clamp to canvas
+  fx=Math.max(60,Math.min(WC-60,fx));
+  fy=Math.max(60,Math.min(HC-60,fy));
+  return createStation(fx,fy,typeIdx,cap||2);
+}
+
+// Task event log (for sidebar)
+let taskEvents=[];
+function logTask(agentIdx,stationType,score){
+  taskEvents.unshift({t:frame,a:agentIdx,st:stationType,sc:score});
+  if(taskEvents.length>30)taskEvents.length=30;
+}
+
+function scenario(name){
+  curScenario=name;frame=0;taskEvents=[];
+  agents=[];obstacles=[];matchedPairs=[];stations=[];
+  const cx=WC/2,cy=HC/2,m=70;
+  const RW=50; // min corridor half-width (robot diameter + margin)
+  lighthouses=[{x:m,y:m},{x:WC-m,y:m},{x:cx,y:HC-m}];
+  computeZones();
+
+  if(name==='wall'){
+    wallV(cy-130,cy+130,cx);
+    stations.push(safeStation(cx-220,cy-80,0));
+    stations.push(safeStation(cx+220,cy+20,1));
+    stations.push(safeStation(cx-180,cy+160,2));
+    stations.push(safeStation(cx+200,cy-140,3));
+
+  }else if(name==='maze'){
+    wallH(cx-100,cx+100,cy-80);
+    wallV(cy-60,cy+100,cx+140);
+    wallV(cy-100,cy+60,cx-140);
+    stations.push(safeStation(cx-260,cy-130,0));
+    stations.push(safeStation(cx+260,cy+130,1));
+    stations.push(safeStation(cx,cy+170,2));
+    stations.push(safeStation(cx,cy-190,3));
+
+  }else if(name==='maze2'){
+    // Kammstruktur — Korridore mind. 2×RW breit
+    const rows=5;
+    const totalH=HC-160; // usable height
+    const gap=Math.max(2*RW+20, totalH/rows); // enforce min corridor height
+    const left=100, right=WC-100;
+    const openW=2*RW+20; // gap at open end — wide enough for robots
+    for(let i=0;i<rows;i++){
+      const y=80+i*gap;
+      if(i%2===0) wallH(left,right-openW,y);
+      else        wallH(left+openW,right,y);
+    }
+    // Stationen in der Mitte jedes Korridors, horizontal zentriert in der offenen Seite
+    stations.push(safeStation(right-openW/2, 80+gap*0.5, 0));
+    stations.push(safeStation(left+openW/2,  80+gap*1.5, 1));
+    stations.push(safeStation(right-openW/2, 80+gap*2.5, 2));
+    stations.push(safeStation(left+openW/2,  80+gap*3.5, 3));
+    stations.push(safeStation(cx, Math.min(80+gap*4.5, HC-70), 4));
+
+  }else if(name==='maze3'){
+    // 4 Quadranten — Türen deutlich breiter als Roboter
+    const qw=Math.min(WC,HC)*0.32;
+    const door=RW+15; // half-door width = 65px → 130px total door
+    wallV(60,cy-door,cx); wallV(cy+door,HC-60,cx);
+    wallH(60,cx-door,cy); wallH(cx+door,WC-60,cy);
+    // Kurze innere Hindernisse — weit weg von Türen
+    const inset=door+40; // min distance from center crossing
+    wallH(cx-qw*0.8,cx-inset,cy-qw*0.35);
+    wallV(cy+inset,cy+qw*0.6,cx+qw*0.35);
+    wallH(cx+inset,cx+qw*0.8,cy+qw*0.35);
+    wallV(cy-qw*0.6,cy-inset,cx-qw*0.35);
+    // Stationen in der Mitte jedes Quadranten
+    stations.push(safeStation(cx-qw*0.55, cy-qw*0.55, 0));
+    stations.push(safeStation(cx+qw*0.55, cy-qw*0.55, 1));
+    stations.push(safeStation(cx+qw*0.55, cy+qw*0.55, 2));
+    stations.push(safeStation(cx-qw*0.55, cy+qw*0.55, 3));
+    stations.push(safeStation(cx, cy, 4));
+
+  }else{// open
+    stations.push(safeStation(120,120,0));
+    stations.push(safeStation(WC-120,120,1));
+    stations.push(safeStation(WC-120,HC-120,2));
+    stations.push(safeStation(120,HC-120,3));
+    stations.push(safeStation(cx,cy,4,3));
+  }
+  targets=stations.map(s=>({x:s.x,y:s.y}));
+
+  for(let i=0;i<N_ROBOTS;i++){
+    const ang=i/N_ROBOTS*Math.PI*2;
+    const rad=Math.min(WC,HC)*0.25;
+    let x=cx+rad*Math.cos(ang)*(0.8+Math.random()*0.4);
+    let y=cy+rad*Math.sin(ang)*(0.8+Math.random()*0.4);
+    // Push away from obstacles (drawn walls)
+    for(let iter=0;iter<10;iter++){
+      let pushed=false;
+      for(const obs of obstacles){
+        const dx=x-obs.x,dy=y-obs.y,d=Math.sqrt(dx*dx+dy*dy);
+        const minD=obs.r+25; // clear distance
+        if(d<minD&&d>0.1){
+          x+=(dx/d)*(minD-d+5);y+=(dy/d)*(minD-d+5);pushed=true;
+        }
+      }
+      if(!pushed)break;
+    }
+    x=Math.max(30,Math.min(WC-30,x));y=Math.max(30,Math.min(HC-30,y));
+    // Also push away from other agents
+    for(const other of agents){
+      const dx=x-other.x,dy=y-other.y,d=Math.sqrt(dx*dx+dy*dy);
+      if(d<30&&d>0.1){x+=(dx/d)*15;y+=(dy/d)*15;}
+    }
+    const a=new Agent(x,y,i);
+    agents.push(a);
+    if(!a.isMouseControlled) assignNextStation(a);
+  }
+  drawnObsStart=obstacles.length;
+  initPheroGrid();
+  if(trailCtx)trailCtx.clearRect(0,0,WC,HC);
+}
+
+// ===== SIMULATION =====
+function step(){
+  const kappa=1<<(+document.getElementById('pKappa').value);
+  const omega=+document.getElementById('pOmega').value;
+  const alpha=+document.getElementById('pAlpha').value;
+  const beta_w=+document.getElementById('pBeta').value;
+  const gam=+document.getElementById('pGamma').value;
+  const agentR=+document.getElementById('pR').value;
+  computeZones();
+
+  // Mouse-controlled agent position
+  const mAgent=agents[N_ROBOTS-1];
+  if(dragIdx===N_ROBOTS-1){mAgent.x=mouseX;mAgent.y=mouseY;}
+
+  // Reset sensors
+  for(const a of agents){
+    a.prevX=a.x;a.prevY=a.y;
+    for(let k=0;k<=16;k++)a.sensor[k]={zone:5,dist:9999,idx:-1};
+    a.nb[0]={k:0,zone:5,dist:9999,idx:-1};a.nb[1]={k:0,zone:5,dist:9999,idx:-1};a.nb[2]={k:0,zone:5,dist:9999,idx:-1};
+    a.blocked.fill(0);a.matchedWith=-1;
+  }
+
+  // Phase 1: Sensor scan
+  for(let ai=0;ai<agents.length;ai++){
+    const a=agents[ai];
+    for(let bi=0;bi<agents.length;bi++){
+      if(bi===ai)continue;
+      const b=agents[bi];
+      const dx=b.x-a.x,dy=b.y-a.y,dist=Math.sqrt(dx*dx+dy*dy);
+      const k=compass16(dx|0,dy|0),zone=classifyZone(dist);
+      if(dist<a.sensor[k].dist)a.sensor[k]={zone,dist,idx:bi};
+      if(dist<a.nb[2].dist){
+        if(dist<a.nb[0].dist){a.nb[2]={...a.nb[1]};a.nb[1]={...a.nb[0]};a.nb[0]={k,zone,dist,idx:bi};}
+        else if(dist<a.nb[1].dist){a.nb[2]={...a.nb[1]};a.nb[1]={k,zone,dist,idx:bi};}
+        else a.nb[2]={k,zone,dist,idx:bi};
+      }
+    }
+    for(const obs of obstacles){
+      const dx=obs.x-a.x,dy=obs.y-a.y,dist=Math.sqrt(dx*dx+dy*dy);
+      if(dist<ZONES.d[3]+obs.r){
+        const k=compass16(dx|0,dy|0);
+        const ed=Math.max(dist-obs.r,1);
+        a.blocked[k]=1;
+        if(ed<ZONES.d[1]){
+          a.blocked[k===1?16:k-1]=1;a.blocked[k===16?1:k+1]=1;
+        }
+        if(ed<a.sensor[k].dist)a.sensor[k]={zone:classifyZone(ed),dist:ed,idx:-999};
+      }
+    }
+    // Ray-scan: check each compass direction for wall segments between obstacles
+    // This catches gaps that individual obstacle checks miss (corners, angled walls)
+    const scanR=ZONES.d[3]; // scan range
+    for(let k=1;k<=16;k++){
+      if(a.blocked[k])continue; // already blocked
+      const ck=C16[k];
+      const rayDx=ck.x/S, rayDy=ck.y/S;
+      // Sample 3 points along the ray
+      for(let step=1;step<=3;step++){
+        const px=a.x+rayDx*scanR*step*0.33;
+        const py=a.y+rayDy*scanR*step*0.33;
+        for(const obs of obstacles){
+          const dx2=px-obs.x,dy2=py-obs.y;
+          const d2=dx2*dx2+dy2*dy2;
+          if(d2<(obs.r+2)*(obs.r+2)){
+            a.blocked[k]=1;
+            const distToObs=Math.sqrt((obs.x-a.x)**2+(obs.y-a.y)**2)-obs.r;
+            if(distToObs>0&&distToObs<a.sensor[k].dist){
+              a.sensor[k]={zone:classifyZone(distToObs),dist:distToObs,idx:-999};
+            }
+            break;
+          }
+        }
+        if(a.blocked[k])break;
+      }
+    }
+    // Wall boundaries: only block exact direction, not ±1
+    const wd=ZONES.d[2];
+    if(a.x<wd){a.blocked[13]=1;if(a.x<wd*0.5){a.blocked[14]=a.blocked[12]=1;}}
+    if(a.x>WC-wd){a.blocked[5]=1;if(a.x>WC-wd*0.5){a.blocked[4]=a.blocked[6]=1;}}
+    if(a.y<wd){a.blocked[1]=1;if(a.y<wd*0.5){a.blocked[2]=a.blocked[16]=1;}}
+    if(a.y>HC-wd){a.blocked[9]=1;if(a.y>HC-wd*0.5){a.blocked[8]=a.blocked[10]=1;}}
+  }
+
+  // Phase 2: DSM matching
+  matchedPairs=[];
+  for(let ai=0;ai<agents.length;ai++){
+    const a=agents[ai];
+    for(let ni=0;ni<3;ni++){
+      const nbA=a.nb[ni];if(nbA.idx<0||nbA.idx>=agents.length)continue;
+      const b=agents[nbA.idx];
+      for(let nj=0;nj<3;nj++){
+        const nbB=b.nb[nj];if(nbB.idx!==ai)continue;
+        if(nbB.k===anti(nbA.k)&&nbA.zone===nbB.zone){
+          a.matchedWith=nbA.idx;b.matchedWith=ai;
+          if(ai<nbA.idx)matchedPairs.push({a:ai,b:nbA.idx,zone:nbA.zone});
+        }
+      }
+    }
+  }
+
+  // Phase 3-7: LBM (skip mouse agent)
+  for(let ai=0;ai<agents.length;ai++){
+    const a=agents[ai];
+    if(a.isMouseControlled&&dragIdx===ai)continue; // mouse overrides
+
+    let sepX=0,sepY=0,cohX=0,cohY=0;
+    let flowX=0,flowY=0,flowN=0; // flow alignment from nearby agents
+    // Pre-compute distance to target for obstacle dampening near stations
+    const earlyD2=a.d2target();
+    const nearTarget=earlyD2<ARRIVE_DIST*ARRIVE_DIST*9;
+    const dampF=nearTarget?Math.max(0.12, Math.min(1.0, earlyD2/(ARRIVE_DIST*ARRIVE_DIST*9))):1.0;
+
+    // Agent's own heading vector (from last movement)
+    const myVX=a.x-a.prevX, myVY=a.y-a.prevY;
+
+    for(let k=1;k<=16;k++){
+      const s=a.sensor[k];
+      if(s.idx>=0 && s.idx<agents.length){
+        // DIRECTION-AWARE agent separation
+        const other=agents[s.idx];
+        const oVX=other.x-other.prevX, oVY=other.y-other.prevY;
+        // Dot product of velocities: positive = same direction, negative = opposing
+        const vDot=myVX*oVX+myVY*oVY;
+        // Same direction → reduce separation to 20%, opposing → full separation
+        const dirFactor=vDot>0?0.2:1.0;
+
+        if(s.zone<=1){const str=((s.zone===0?40:15)*dirFactor)|0;sepX-=str*C16[k].x;sepY-=str*C16[k].y;}
+        else if(s.zone===2){const str=(6*dirFactor)|0;sepX-=str*C16[k].x;sepY-=str*C16[k].y;}
+        else if(s.zone===3){sepX-=2*C16[k].x;sepY-=2*C16[k].y;}
+        else if(s.zone===5){cohX+=3*C16[k].x;cohY+=3*C16[k].y;}
+
+        // Flow alignment: adopt nearby agents' velocity (like fluid viscosity)
+        if(s.zone>=2 && s.zone<=4){
+          flowX+=oVX; flowY+=oVY; flowN++;
+        }
+      } else if(s.idx===-999){
+        // Obstacle sensor — full separation, no direction discount
+        if(s.zone<=1){const str=(s.zone===0?60:25)*dampF|0;sepX-=str*C16[k].x;sepY-=str*C16[k].y;}
+        else if(s.zone===2){const str=10*dampF|0;sepX-=str*C16[k].x;sepY-=str*C16[k].y;}
+        else if(s.zone===3){sepX-=3*C16[k].x;sepY-=3*C16[k].y;}
+      }
+    }
+    // Obstacle direct repulsion
+    for(const obs of obstacles){
+      const dx=obs.x-a.x,dy=obs.y-a.y,dist=Math.sqrt(dx*dx+dy*dy)-obs.r;
+      if(dist<ZONES.d[3]&&dist>0){
+        const k=compass16(dx|0,dy|0),str=Math.min(((ZONES.d[3]/dist)*12*dampF)|0,70);
+        sepX-=str*C16[k].x;sepY-=str*C16[k].y;
+      }
+    }
+    if(a.x<ZONES.d[2])sepX+=900*dampF|0;if(a.x>WC-ZONES.d[2])sepX-=900*dampF|0;
+    if(a.y<ZONES.d[2])sepY+=900*dampF|0;if(a.y>HC-ZONES.d[2])sepY-=900*dampF|0;
+
+    let tDir=compass16((a.tx-a.x)|0,(a.ty-a.y)|0);
+    a.compassDir=tDir;
+    const curD2=a.d2target();
+
+    // === DOCK OVERRIDE — docked agents hold position, skip all navigation ===
+    if(a.state==='DOCK'){
+      a.wallFollow=false;a.stuckTimer=0;a.mode='DOCK';a.backPressure=0;
+      // Gentle drift toward station center + separation
+      const si=a.targetStation;
+      if(si>=0){
+        const s=stations[si];
+        a.x+=(s.x-a.x)*0.08;a.y+=(s.y-a.y)*0.08;
+      }
+      a.x=Math.max(agentR,Math.min(WC-agentR,a.x));a.y=Math.max(agentR,Math.min(HC-agentR,a.y));
+      continue;
+    }
+
+    const arriveDist2=ARRIVE_DIST*ARRIVE_DIST*4; // generous calm-down zone
+
+    // === ARRIVAL ZONE — approaching station, calm down ===
+    if(curD2 < arriveDist2) {
+      a.wallFollow = false;
+      a.mode = 'NAV';
+      a.stuckTimer = 0;
+      a.backPressure = Math.max(a.backPressure - 16, 0);
+      a.bestD2 = curD2;
+    }
+
+    // === STUCK DETECTION ===
+    if(curD2 < a.bestD2 - 20) { // meaningful progress
+      a.bestD2 = curD2;
+      a.stuckTimer = 0;
+      if(a.wallFollow && curD2 < a.d2AtSwitch - 100) {
+        a.wallFollow = false;
+        a.mode = 'NAV';
+        a.backPressure = 0;
+      }
+    } else {
+      a.stuckTimer++;
+    }
+
+    // Distinguish: stuck because of WALL or because of AGENTS?
+    const blockedByWall=a.blocked[tDir]; // true = obstacle in direct path
+    const nearAgentCount=a.nb.filter(n=>n.dist<ZONES.d[2]&&n.idx>=0).length;
+    const blockedByAgents=!blockedByWall && nearAgentCount>=2 && a.stuckTimer>15;
+
+    // Anti-deadlock: random perturbation when stuck in agent cluster
+    if(blockedByAgents && a.stuckTimer>20){
+      const randAngle=Math.random()*Math.PI*2;
+      const randStr=80+Math.random()*120;
+      sepX+=(Math.cos(randAngle)*randStr*256)|0;
+      sepY+=(Math.sin(randAngle)*randStr*256)|0;
+      if(a.stuckTimer>50){
+        tDir=((Math.random()*16)|0)+1;
+      }
+    }
+
+    // === EMERGENCY ESCAPE: teleport if stuck for way too long ===
+    if(a.stuckTimer>200){
+      // Find a safe position near the target station
+      const si=a.targetStation;
+      if(si>=0){
+        const s=stations[si];
+        // Try random positions near the station
+        for(let attempt=0;attempt<20;attempt++){
+          const ang=Math.random()*Math.PI*2;
+          const r=ARRIVE_DIST*2+Math.random()*60;
+          const nx=s.x+Math.cos(ang)*r, ny=s.y+Math.sin(ang)*r;
+          let safe=true;
+          for(const obs of obstacles){
+            if(Math.sqrt((nx-obs.x)**2+(ny-obs.y)**2)<obs.r+agentR+5){safe=false;break;}
+          }
+          if(safe&&nx>agentR&&nx<WC-agentR&&ny>agentR&&ny<HC-agentR){
+            a.x=nx;a.y=ny;break;
+          }
+        }
+      }
+      a.stuckTimer=0;a.bestD2=Infinity;a.wallFollow=false;a.backPressure=0;a.mode='NAV';
+    }
+
+    // Enter wall-follow mode only when blocked by WALLS (not agents)
+    if(a.stuckTimer > 25 && !a.wallFollow && blockedByWall) {
+      a.wallFollow = true;
+      a.d2AtSwitch = curD2;
+      a.mode = 'WALL';
+      // Choose CW or CCW: check which side has more free sectors
+      let freeR=0, freeL=0;
+      for(let off=1;off<=6;off++){
+        const kR=((tDir-1+off)%16)+1, kL=((tDir-1-off+16)%16)+1;
+        if(!a.blocked[kR]) freeR++;
+        if(!a.blocked[kL]) freeL++;
+      }
+      a.wallFollowCW = freeR >= freeL ? 1 : -1;
+      // Also factor in back-pressure from neighbors
+      for(let ni=0;ni<3;ni++){
+        const nb=a.nb[ni];
+        if(nb.idx>=0 && nb.idx<agents.length && agents[nb.idx].backPressure > 50){
+          // Neighbor is also stuck — go opposite direction
+          const nbDir = nb.k;
+          // If stuck neighbor is CW from target dir, go CCW
+          const diff = ((nbDir-1)-(tDir-1)+16)%16;
+          if(diff<8) a.wallFollowCW = -1;
+          else a.wallFollowCW = 1;
+        }
+      }
+    }
+
+    // === DIRECTION DECISION ===
+    if(a.wallFollow) {
+      // Wall-follow: find tangential direction along wall
+      // Start from target direction, scan in wallFollowCW direction for first free sector
+      let found = false;
+      for(let off=1;off<=15;off++){
+        const k = ((tDir-1 + off*a.wallFollowCW + 16)%16)+1;
+        if(!a.blocked[k]){
+          tDir = k;
+          found = true;
+          break;
+        }
+      }
+      if(!found) tDir = anti(a.compassDir); // all blocked: reverse
+
+      // Increase back-pressure
+      a.backPressure = Math.min(a.backPressure + 6, 255);
+
+      // Check exit condition: direct path free AND closer (or timeout)
+      const wallFollowAge=a.stuckTimer;
+      if(!a.blocked[a.compassDir] && (curD2 < a.d2AtSwitch - 30 || wallFollowAge>80)) {
+        a.wallFollow = false;
+        a.mode = 'NAV';
+        a.stuckTimer = 0;
+        a.bestD2 = curD2;
+        a.backPressure = 0;
+        tDir = a.compassDir;
+      }
+      // Forced exit after very long wall-follow (prevents endless circling)
+      if(wallFollowAge>120){
+        a.wallFollow=false;a.mode='NAV';a.stuckTimer=0;a.bestD2=curD2;a.backPressure=0;
+        a.wallFollowCW*=-1; // try opposite direction next time
+      }
+    } else {
+      // Normal navigation: rotate to nearest free sector
+      a.backPressure = Math.max(a.backPressure - 4, 0); // decay
+      if(a.blocked[tDir]){
+        let found=false;
+        for(let off=1;off<=8;off++){
+          const kR=((tDir-1+off)%16)+1,kL=((tDir-1-off+16)%16)+1;
+          if(!a.blocked[kR]){tDir=kR;found=true;break;}
+          if(!a.blocked[kL]){tDir=kL;found=true;break;}
+        }
+        if(!found)tDir=anti(a.compassDir);
+      }
+    }
+    a.steerDir=tDir;
+
+    // === BACK-PRESSURE from neighbors ===
+    // Mild push from stuck neighbors — not too strong to prevent chain deadlocks
+    for(let ni=0;ni<3;ni++){
+      const nb=a.nb[ni];
+      if(nb.idx>=0 && nb.idx<agents.length){
+        const neighbor = agents[nb.idx];
+        if(neighbor.backPressure > 50 && nb.k>0){
+          const pressStr = (neighbor.backPressure >> 4); // 0-15 (halved)
+          sepX -= pressStr * C16[nb.k].x;
+          sepY -= pressStr * C16[nb.k].y;
+        }
+      }
+    }
+
+    // === FLOW ALIGNMENT → add to target velocity ===
+    let flowAlignX=0, flowAlignY=0;
+    if(flowN>0){
+      flowAlignX=((flowX*64)/flowN)|0;
+      flowAlignY=((flowY*64)/flowN)|0;
+    }
+
+    // === PHEROMONE READ → blend trail direction into movement ===
+    let pheroX=0, pheroY=0;
+    const pheroActive=document.getElementById('pheroOn').checked;
+    if(pheroActive && a.targetStation>=0 && a.state==='TRAVEL'){
+      // Read current cell AND neighboring cells in travel direction
+      const ph=pheroRead(a.x,a.y,a.targetStation);
+      // Also check cell ahead
+      const aheadX=a.x+C16[tDir].x/S*PCELL;
+      const aheadY=a.y+C16[tDir].y/S*PCELL;
+      const phAhead=pheroRead(aheadX,aheadY,a.targetStation);
+      // Use the stronger one
+      const bestPh=ph.str>=phAhead.str?ph:phAhead;
+      if(bestPh.dir>0 && bestPh.str>3){
+        // Scale: at max strength (255), pheromone ≈ 75% of alpha influence
+        // When path is blocked, boost pheromone to override compass
+        const blocked=a.blocked[tDir];
+        const boostFactor=blocked?3.0:1.0;
+        const phStr=((bestPh.str/PHERO_MAX)*192*boostFactor)|0;
+        // NO >>8 here! Must be on same scale as alpha*C16[tDir].x
+        pheroX=C16[bestPh.dir].x*phStr;
+        pheroY=C16[bestPh.dir].y*phStr;
+      }
+    }
+
+    const utx=((alpha*C16[tDir].x+beta_w*(sepX>>8)+gam*(cohX>>8)+flowAlignX+pheroX)>>8)|0;
+    const uty=((alpha*C16[tDir].y+beta_w*(sepY>>8)+gam*(cohY>>8)+flowAlignY+pheroY)>>8)|0;
+    const rho=a.rho();
+    for(let k=0;k<=16;k++){
+      const wh=k===0?256:32;let dot=0;
+      if(k>0){dot=((C16[k].x*utx+C16[k].y*uty)>>8)|0;if(a.blocked[k])dot=Math.min(dot,-Math.abs(dot));}
+      a.feq[k]=((wh*(rho+((kappa*dot)>>2)))/768)|0;if(a.feq[k]<0)a.feq[k]=0;
+    }
+    for(let k=0;k<=16;k++){const d=a.f[k]-a.feq[k];a.f[k]=a.f[k]-((omega*d)>>8);if(a.f[k]<0)a.f[k]=0;}
+    let jx=0,jy=0;for(let k=1;k<=16;k++){jx+=a.f[k]*C16[k].x;jy+=a.f[k]*C16[k].y;}
+    a.x+=(jx/Math.max(rho,1))*2.0/S;a.y+=(jy/Math.max(rho,1))*2.0/S;
+
+    // === PHEROMONE DEPOSIT — leave trail while traveling ===
+    if(pheroActive && a.targetStation>=0 && a.state==='TRAVEL' && a.steerDir>0){
+      pheroDeposit(a.x,a.y,a.targetStation,a.steerDir);
+      // Also deposit in the cell behind (thicker trail)
+      const behindX=a.x-C16[a.steerDir].x/S*PCELL*0.5;
+      const behindY=a.y-C16[a.steerDir].y/S*PCELL*0.5;
+      pheroDeposit(behindX,behindY,a.targetStation,a.steerDir);
+    }
+
+    for(const obs of obstacles){
+      const dx=a.x-obs.x,dy=a.y-obs.y,d=Math.sqrt(dx*dx+dy*dy);
+      const minR=obs.r+agentR+2;
+      if(d<minR&&d>0.1){const p=(minR-d)+2;a.x+=(dx/d)*p;a.y+=(dy/d)*p;}
+    }
+    a.x=Math.max(agentR,Math.min(WC-agentR,a.x));a.y=Math.max(agentR,Math.min(HC-agentR,a.y));
+  }
+
+  // Hard agent-agent (soft push — allows closer proximity in corridors)
+  const hardR=ZONES.d[0]*0.85; // slightly reduced hard radius
+  for(let i=0;i<agents.length;i++)for(let j=i+1;j<agents.length;j++){
+    const a=agents[i],b=agents[j];const dx=b.x-a.x,dy=b.y-a.y,d=Math.sqrt(dx*dx+dy*dy);
+    if(d<hardR&&d>0.1){
+      const ov=(hardR-d)*0.4,nx=dx/d,ny=dy/d;
+      if(!a.isMouseControlled||dragIdx!==a.idx){a.x-=nx*ov;a.y-=ny*ov;}
+      if(!b.isMouseControlled||dragIdx!==b.idx){b.x+=nx*ov;b.y+=ny*ov;}
+    }
+  }
+
+  // === STATION DOCK / TASK LOGIC ===
+  for(const a of agents){
+    if(a.isMouseControlled)continue;
+    if(a.dockCooldown>0)a.dockCooldown--;
+    const si=a.targetStation;
+    if(si<0||si>=stations.length)continue;
+    const s=stations[si];
+    const dx=a.x-s.x,dy=a.y-s.y;
+    const dist=Math.sqrt(dx*dx+dy*dy);
+
+    if(a.state==='TRAVEL' && a.dockCooldown<=0 && dist<ARRIVE_DIST*1.3){
+      // Arrived at station — start docking
+      a.state='DOCK';
+      a.dockTimer=STATION_TYPES[s.type].dockTime;
+      s.docked.push(a.idx);
+      a.wallFollow=false;a.stuckTimer=0;a.mode='NAV';a.backPressure=0;
+      toast(ROBOT_NAMES[a.idx]+' dockt an '+STATION_TYPES[s.type].icon+' '+STATION_TYPES[s.type].name);
+    }
+    if(a.state==='DOCK'){
+      a.dockTimer--;
+      a.tx=s.x; a.ty=s.y;
+      if(a.dockTimer<=0){
+        a.score++;
+        a.taskLog.push({station:si,frame});
+        logTask(a.idx,s.type,a.score);
+        s.docked=s.docked.filter(id=>id!==a.idx);
+        a.dockCooldown=40; // must travel for 40 frames before docking again
+        assignNextStation(a);
+        toast(ROBOT_NAMES[a.idx]+' ✓ '+STATION_TYPES[s.type].icon+' → weiter! ('+a.score+' Pkt)');
+      }
+    }
+  }
+  // === PHEROMONE EVAPORATION ===
+  if(document.getElementById('pheroOn').checked && frame%3===0){
+    pheroEvaporate();
+  }
+  frame++;
+}
+
+// ===== RENDERING =====
+function draw(){
+  const showZ=document.getElementById('showZones').checked;
+  const showNB=document.getElementById('showNB').checked;
+  const showS=document.getElementById('showSteer').checked;
+  const showBl=document.getElementById('showBlocked').checked;
+  const showM=document.getElementById('showMatch').checked;
+  const showL=document.getElementById('showLabels').checked;
+  const showLH=document.getElementById('showLH').checked;
+  const showLHdir=document.getElementById('showLHdir').checked;
+  const showTr=document.getElementById('showTrails').checked;
+  const agentR=+document.getElementById('pR').value;
+
+  if(showTr&&trailCtx){
+    trailCtx.fillStyle='rgba(8,12,20,0.03)';trailCtx.fillRect(0,0,WC,HC);
+    for(const a of agents){if(a.isMouseControlled)continue;
+      trailCtx.strokeStyle=ROBOT_COLORS[a.idx]+'30';trailCtx.lineWidth=2;
+      trailCtx.beginPath();trailCtx.moveTo(a.prevX,a.prevY);trailCtx.lineTo(a.x,a.y);trailCtx.stroke();}
+  }
+  ctx.fillStyle='rgba(8,12,20,0.95)';ctx.fillRect(0,0,WC,HC);
+  // Grid
+  ctx.strokeStyle='#0e1422';ctx.lineWidth=0.5;
+  for(let x=0;x<WC;x+=60){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,HC);ctx.stroke();}
+  for(let y=0;y<HC;y+=60){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(WC,y);ctx.stroke();}
+  if(showTr&&trailCvs)ctx.drawImage(trailCvs,0,0);
+
+  // === PHEROMONE VISUALIZATION ===
+  const showPh=document.getElementById('showPhero').checked;
+  if(showPh&&pheroGrid){
+    for(let gy=0;gy<pheroH;gy++){
+      for(let gx=0;gx<pheroW;gx++){
+        const ci=gy*pheroW+gx;
+        // Find strongest pheromone in this cell across all stations
+        let bestStr=0,bestDir=0,bestSi=-1;
+        for(let si=0;si<Math.min(stations.length,MAX_STATIONS);si++){
+          const pi=ci*MAX_STATIONS+si;
+          if(pheroGrid.str[pi]>bestStr){
+            bestStr=pheroGrid.str[pi];bestDir=pheroGrid.dir[pi];bestSi=si;
+          }
+        }
+        if(bestStr<3||bestDir<1)continue;
+        const px=gx*PCELL+PCELL/2, py=gy*PCELL+PCELL/2;
+        const ck=C16[bestDir];
+        const a2=bestStr/PHERO_MAX; // 0-1 alpha
+        // Get station color
+        const stCol=bestSi>=0&&bestSi<stations.length?STATION_TYPES[stations[bestSi].type].color:'#38bdf8';
+        // Draw small direction arrow
+        const len=PCELL*0.4*a2+2;
+        const ex=px+ck.x/S*len, ey=py+ck.y/S*len;
+        ctx.strokeStyle=stCol;ctx.globalAlpha=a2*0.6;ctx.lineWidth=1.5;
+        ctx.beginPath();ctx.moveTo(px-ck.x/S*len*0.3,py-ck.y/S*len*0.3);ctx.lineTo(ex,ey);ctx.stroke();
+        // Dot at tip
+        ctx.fillStyle=stCol;
+        ctx.beginPath();ctx.arc(ex,ey,1.5,0,Math.PI*2);ctx.fill();
+        ctx.globalAlpha=1;
+      }
+    }
+  }
+
+  // Obstacles
+  for(let oi=0;oi<obstacles.length;oi++){
+    const obs=obstacles[oi];
+    const isDrawn=oi>=drawnObsStart;
+    ctx.beginPath();ctx.arc(obs.x,obs.y,obs.r,0,Math.PI*2);
+    ctx.fillStyle=isDrawn?'rgba(249,115,22,0.6)':'rgba(248,113,113,0.5)';
+    ctx.fill();
+    ctx.strokeStyle=isDrawn?'#f97316':'#f87171';ctx.lineWidth=isDrawn?2:1.5;ctx.stroke();
+  }
+
+  // Lighthouses
+  if(showLH)lighthouses.forEach((lh,i)=>{
+    const g=ctx.createRadialGradient(lh.x,lh.y,0,lh.x,lh.y,30);
+    g.addColorStop(0,'rgba(251,191,36,0.2)');g.addColorStop(1,'transparent');ctx.fillStyle=g;ctx.fillRect(lh.x-30,lh.y-30,60,60);
+    ctx.beginPath();ctx.moveTo(lh.x,lh.y-7);ctx.lineTo(lh.x+5,lh.y);ctx.lineTo(lh.x,lh.y+7);ctx.lineTo(lh.x-5,lh.y);ctx.closePath();
+    ctx.fillStyle='#fbbf24';ctx.fill();ctx.font='9px JetBrains Mono';ctx.fillText('L'+(i+1),lh.x+8,lh.y+3);
+  });
+
+  // Stations
+  for(let si=0;si<stations.length;si++){
+    const s=stations[si];
+    const st=STATION_TYPES[s.type];
+    const pulse=ARRIVE_DIST+Math.sin(frame*0.05+si)*6;
+    // Pulse ring
+    ctx.beginPath();ctx.arc(s.x,s.y,pulse,0,Math.PI*2);ctx.strokeStyle=st.color+'25';ctx.lineWidth=1;ctx.stroke();
+    // Dock zone
+    ctx.beginPath();ctx.arc(s.x,s.y,ARRIVE_DIST,0,Math.PI*2);ctx.strokeStyle=st.color+'50';ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.stroke();ctx.setLineDash([]);
+    // Icon background
+    ctx.beginPath();ctx.arc(s.x,s.y,14,0,Math.PI*2);ctx.fillStyle=st.color+'30';ctx.fill();ctx.strokeStyle=st.color;ctx.lineWidth=2;ctx.stroke();
+    // Emoji icon
+    ctx.font='16px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(st.icon,s.x,s.y+1);
+    // Label
+    ctx.font='9px JetBrains Mono';ctx.textAlign='left';ctx.textBaseline='alphabetic';
+    ctx.fillStyle=st.color+'b0';
+    const docked=s.docked.length;
+    ctx.fillText(st.name+' ('+docked+'/'+s.capacity+')',s.x+18,s.y+3);
+    // Progress arcs for docked agents
+    for(let di=0;di<s.docked.length;di++){
+      const da=agents[s.docked[di]];
+      if(!da)continue;
+      const maxT=STATION_TYPES[s.type].dockTime;
+      const pct=1-da.dockTimer/maxT;
+      ctx.beginPath();ctx.arc(s.x,s.y,18+di*4,-(Math.PI/2),-(Math.PI/2)+pct*Math.PI*2);
+      ctx.strokeStyle=ROBOT_COLORS[da.idx];ctx.lineWidth=2.5;ctx.stroke();
+    }
+  }
+
+  // Matched pairs
+  if(showM)for(const mp of matchedPairs){
+    const a=agents[mp.a],b=agents[mp.b];
+    ctx.strokeStyle=ZC[mp.zone]+'50';ctx.lineWidth=1.5;ctx.setLineDash([4,6]);
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.setLineDash([]);
+  }
+
+  // Agents
+  for(const a of agents){
+    const col=ROBOT_COLORS[a.idx];
+    const isMouse=a.isMouseControlled;
+
+    // Zone rings
+    if(showZ)for(let z=3;z>=1;z--){
+      ctx.beginPath();ctx.arc(a.x,a.y,ZONES.d[z],0,Math.PI*2);
+      ctx.strokeStyle=ZC[z]+'15';ctx.lineWidth=0.5;ctx.stroke();
+    }
+
+    // Lighthouse direction pointers (DSM lighthouse signatures)
+    if(showLHdir)lighthouses.forEach((lh,li)=>{
+      const dx=lh.x-a.x,dy=lh.y-a.y;
+      const k=compass16(dx|0,dy|0);
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      const len=Math.min(agentR*2.2,Math.max(agentR*0.8,8000/(dist||1)));
+      const ck=C16[k];
+      const ex=a.x+ck.x/S*len,ey=a.y+ck.y/S*len;
+      const lhColors=['#fbbf2480','#fb923c80','#facc1580'];
+      ctx.strokeStyle=lhColors[li];ctx.lineWidth=1.5;ctx.setLineDash([2,3]);
+      ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(ex,ey);ctx.stroke();ctx.setLineDash([]);
+      ctx.beginPath();ctx.arc(ex,ey,2,0,Math.PI*2);ctx.fillStyle=lhColors[li];ctx.fill();
+      if(showL){ctx.font='7px JetBrains Mono';ctx.fillStyle=lhColors[li];ctx.fillText('L'+(li+1),ex+3,ey-3);}
+    });
+
+    // 3-Neighbor compass pointers
+    if(showNB)for(let ni=0;ni<3;ni++){
+      const nb=a.nb[ni];if(nb.dist>9000||nb.k===0)continue;
+      const zc=ZC[Math.min(nb.zone,5)];
+      const len=Math.min(Math.max(agentR*0.8, ZONES.d[2]/(nb.dist||1)*agentR),agentR*2.5);
+      const ck=C16[nb.k];
+      const ex=a.x+ck.x/S*len,ey=a.y+ck.y/S*len;
+      ctx.strokeStyle=zc;ctx.lineWidth=3-ni*0.8;
+      ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(ex,ey);ctx.stroke();
+      ctx.beginPath();ctx.arc(ex,ey,2.5-ni*0.5,0,Math.PI*2);ctx.fillStyle=zc;ctx.fill();
+      // Label neighbor ID
+      if(showL&&nb.idx>=0&&nb.idx<agents.length){
+        ctx.font='8px JetBrains Mono';ctx.fillStyle=zc+'cc';
+        ctx.fillText(ROBOT_NAMES[nb.idx],ex+4,ey-2);
+      }
+    }
+
+    // Target line to assigned station
+    if(a.targetStation>=0 && a.state==='TRAVEL'){
+      const s=stations[a.targetStation];
+      const st=STATION_TYPES[s.type];
+      ctx.strokeStyle=st.color+'20';ctx.lineWidth=1;ctx.setLineDash([3,6]);
+      ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(s.x,s.y);ctx.stroke();ctx.setLineDash([]);
+    }
+
+    // Steering
+    if(showS&&a.steerDir>0){
+      const ck=C16[a.steerDir];
+      if(a.compassDir!==a.steerDir&&a.compassDir>0){
+        const oc=C16[a.compassDir];
+        ctx.strokeStyle='rgba(244,114,182,0.2)';ctx.lineWidth=1;ctx.setLineDash([2,3]);
+        ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(a.x+oc.x/S*agentR*1.5,a.y+oc.y/S*agentR*1.5);ctx.stroke();ctx.setLineDash([]);
+      }
+      ctx.strokeStyle=col+'90';ctx.lineWidth=2;
+      ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(a.x+ck.x/S*agentR*1.8,a.y+ck.y/S*agentR*1.8);ctx.stroke();
+      // Arrowhead
+      const tip={x:a.x+ck.x/S*agentR*1.8,y:a.y+ck.y/S*agentR*1.8};
+      ctx.beginPath();ctx.arc(tip.x,tip.y,3,0,Math.PI*2);ctx.fillStyle=col+'70';ctx.fill();
+    }
+
+    // Blocked
+    if(showBl)for(let k=1;k<=16;k++){
+      if(!a.blocked[k])continue;
+      const ck=C16[k];
+      ctx.strokeStyle='rgba(239,68,68,0.4)';ctx.lineWidth=3;
+      ctx.beginPath();
+      ctx.moveTo(a.x+ck.x/S*(agentR*0.5),a.y+ck.y/S*(agentR*0.5));
+      ctx.lineTo(a.x+ck.x/S*(agentR*1.2),a.y+ck.y/S*(agentR*1.2));
+      ctx.stroke();
+      // X mark at tip
+      const tx=a.x+ck.x/S*(agentR*1.2),ty=a.y+ck.y/S*(agentR*1.2);
+      ctx.strokeStyle='rgba(239,68,68,0.5)';ctx.lineWidth=1.5;
+      ctx.beginPath();ctx.moveTo(tx-3,ty-3);ctx.lineTo(tx+3,ty+3);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(tx+3,ty-3);ctx.lineTo(tx-3,ty+3);ctx.stroke();
+    }
+
+    // Body
+    ctx.beginPath();ctx.arc(a.x,a.y,agentR,0,Math.PI*2);
+    const isWall=a.wallFollow;
+    ctx.fillStyle=isMouse?'rgba(244,114,182,0.12)':(a.state==='DOCK'?'rgba(52,211,153,0.12)':(isWall?'rgba(251,191,36,0.12)':'rgba(56,189,248,0.06)'));
+    ctx.fill();
+    ctx.strokeStyle=isMouse?'#f472b6':(isWall?'#fbbf24':(a.matchedWith>=0?'#34d399aa':col+'40'));
+    ctx.lineWidth=isMouse?2.5:(isWall?2.5:1.5);ctx.stroke();
+
+    // Wall-follow direction indicator (rotating arrow arc)
+    if(isWall){
+      const arcR=agentR+6;
+      const startAng=((a.steerDir-1)*22.5-90)*Math.PI/180;
+      const sweep=a.wallFollowCW*Math.PI*0.5;
+      ctx.beginPath();ctx.arc(a.x,a.y,arcR,startAng,startAng+sweep,a.wallFollowCW<0);
+      ctx.strokeStyle='#fbbf2480';ctx.lineWidth=2;ctx.stroke();
+      // Arrow tip
+      const tipAng=startAng+sweep;
+      const tx2=a.x+Math.cos(tipAng)*arcR,ty2=a.y+Math.sin(tipAng)*arcR;
+      ctx.beginPath();ctx.arc(tx2,ty2,3,0,Math.PI*2);ctx.fillStyle='#fbbf2480';ctx.fill();
+    }
+
+    // Back-pressure indicator (red glow intensity)
+    if(a.backPressure>20){
+      const pGlow=ctx.createRadialGradient(a.x,a.y,agentR,a.x,a.y,agentR+a.backPressure/10);
+      pGlow.addColorStop(0,'rgba(239,68,68,'+(a.backPressure/600)+')');
+      pGlow.addColorStop(1,'transparent');
+      ctx.fillStyle=pGlow;
+      ctx.beginPath();ctx.arc(a.x,a.y,agentR+a.backPressure/10,0,Math.PI*2);ctx.fill();
+    }
+
+    // Inner dot
+    const g=ctx.createRadialGradient(a.x,a.y,0,a.x,a.y,agentR*0.5);
+    g.addColorStop(0,col);g.addColorStop(1,col+'00');ctx.fillStyle=g;
+    ctx.beginPath();ctx.arc(a.x,a.y,agentR*0.4,0,Math.PI*2);ctx.fill();
+
+    // Label
+    if(showL){
+      ctx.font='bold '+Math.max(11,agentR*0.6)+'px JetBrains Mono';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.strokeStyle='rgba(255,255,255,0.5)';ctx.lineWidth=2.5;
+      ctx.strokeText(ROBOT_NAMES[a.idx],a.x,a.y);
+      ctx.fillStyle=isMouse?'#1a0520':'#0a0a0a';
+      ctx.fillText(ROBOT_NAMES[a.idx],a.x,a.y);ctx.textAlign='left';ctx.textBaseline='alphabetic';
+    }
+
+    // Dock indicator
+    if(a.state==='DOCK'){
+      const maxT=a.targetStation>=0?STATION_TYPES[stations[a.targetStation].type].dockTime:60;
+      const pct=1-a.dockTimer/maxT;
+      ctx.beginPath();ctx.arc(a.x,a.y,agentR+5,-(Math.PI/2),-(Math.PI/2)+pct*Math.PI*2);
+      ctx.strokeStyle='#34d399';ctx.lineWidth=3;ctx.stroke();
+      // Pulsing inner glow
+      ctx.beginPath();ctx.arc(a.x,a.y,agentR+2,0,Math.PI*2);
+      ctx.strokeStyle='#34d39960';ctx.lineWidth=1.5;ctx.stroke();
+    }
+  }
+
+  // Stats panel
+  const sel=dragIdx>=0?agents[dragIdx]:(agents[0]||null);
+  const selName=sel?ROBOT_NAMES[sel.idx]:'—';
+  const nbH=sel?sel.nb.map((n,i)=>{
+    const zc=n.dist<9000?ZC[n.zone]:'#475569';
+    const nm=n.idx>=0&&n.idx<agents.length?ROBOT_NAMES[n.idx]:'?';
+    return`NB${i+1}→<span style="color:${zc}"><b>${nm}</b> ${DN[n.k]} Z${n.zone}</span> d=<span class="v">${n.dist<9000?n.dist.toFixed(0):'∞'}</span>`;
+  }).join('<br>'):'—';
+  const wallCount=agents.filter(a=>a.wallFollow).length;
+  document.getElementById('stats').innerHTML=
+    `<span style="color:#475569">── Roboter ${selName} ──</span><br>${nbH}<br>`+
+    `Steer: <span class="v">${sel?DN[sel.steerDir]:'—'}</span>`+
+    (sel&&sel.compassDir!==sel.steerDir?` <span class="vo">(Ziel:${DN[sel.compassDir]})</span>`:'')+
+    `<br>Modus: <span class="${sel&&sel.wallFollow?'vw':'v2'}">${sel?sel.mode:'—'}</span>`+
+    (sel?` | Stuck: <span class="v">${sel.stuckTimer}</span> | BP: <span class="vr">${sel.backPressure}</span>`:'')+
+    `<br>Auftrag: <span class="v2">${sel&&sel.targetStation>=0?STATION_TYPES[stations[sel.targetStation].type].icon+' '+STATION_TYPES[stations[sel.targetStation].type].name:'—'}</span>`+
+    ` <span class="vo">[${sel?sel.state:'—'}${sel&&sel.state==='DOCK'?' '+sel.dockTimer:''}]</span>`+
+    `<br>Match: <span class="v2">${sel&&sel.matchedWith>=0?ROBOT_NAMES[sel.matchedWith]:'—'}</span>`+
+    `<br><span style="color:#475569">──── Punkte ────</span><br>`+
+    agents.filter(a=>!a.isMouseControlled).sort((a,b)=>b.score-a.score).slice(0,6).map(a=>
+      `<span style="color:${ROBOT_COLORS[a.idx]}">${ROBOT_NAMES[a.idx]}</span>: <span class="v2">${a.score}</span>`
+    ).join(' | ')+
+    `<br><span style="color:#475569">────────────</span><br>`+
+    `Frame: <span class="v">${frame}</span> | Matches: <span class="v2">${matchedPairs.length}</span><br>`+
+    `Wandfolge: <span class="vw">${wallCount}</span> | Stationen: <span class="v2">${stations.length}</span>`;
+
+  // === DRAW MODE INDICATOR ===
+  if(drawMode!=='none'){
+    const modeLabels={draw:'✏️ Wände zeichnen',station:'📍 Station setzen',erase:'🧹 Radierer'};
+    const modeColors={draw:'#f97316',station:'#34d399',erase:'#ef4444'};
+    ctx.font='bold 13px JetBrains Mono';ctx.textAlign='center';ctx.textBaseline='top';
+    ctx.fillStyle=modeColors[drawMode]||'#fff';
+    ctx.fillText(modeLabels[drawMode]||'',WC/2,12);
+    ctx.textAlign='left';ctx.textBaseline='alphabetic';
+    // Hint below
+    ctx.font='10px JetBrains Mono';ctx.fillStyle='rgba(255,255,255,0.3)';
+    ctx.textAlign='center';
+    ctx.fillText(drawMode==='draw'?'Klicken + Ziehen':drawMode==='erase'?'Klicken + Ziehen':'Klicken',WC/2,30);
+    ctx.textAlign='left';ctx.textBaseline='alphabetic';
+  }
+
+  // === SCOREBOARD OVERLAY (on canvas) ===
+  const sorted=agents.filter(a=>!a.isMouseControlled).sort((a,b)=>b.score-a.score);
+  let sbH='';
+  for(const a of sorted){
+    const st=a.targetStation>=0?STATION_TYPES[stations[a.targetStation].type]:{icon:'—',name:''};
+    const stateIcon=a.state==='DOCK'?'⏳':a.wallFollow?'🧱':'→';
+    sbH+=`<div class="sr"><span class="sn" style="color:${ROBOT_COLORS[a.idx]}">${ROBOT_NAMES[a.idx]}</span><span class="sp">${a.score}</span><span class="sd">${stateIcon} ${st.icon}</span></div>`;
+  }
+  document.getElementById('sbBody').innerHTML=sbH;
+
+  // === TASK LOG (sidebar) ===
+  if(taskEvents.length>0){
+    document.getElementById('taskLog').innerHTML=taskEvents.slice(0,15).map(ev=>{
+      const st=STATION_TYPES[ev.st];
+      return`<span style="color:${ROBOT_COLORS[ev.a]}">${ROBOT_NAMES[ev.a]}</span> ${st.icon} <span style="color:var(--acc3)">${st.name}</span> <span style="color:var(--dim)">#${ev.sc} f${ev.t}</span>`;
+    }).join('<br>');
+  }
+}
+
+// ===== DRAW MODE FUNCTIONS =====
+const cw=document.getElementById('cw');
+const drawCursor=document.getElementById('drawCursor');
+const DRAW_R=8; // drawn obstacle radius
+const ERASE_R=25; // eraser radius
+const DRAW_SPACING=12; // center-to-center spacing (must be < 2*DRAW_R for overlap)
+
+function setDrawMode(mode){
+  drawMode=mode;
+  ['btnDraw','btnStation','btnErase'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  if(mode==='draw')document.getElementById('btnDraw').classList.add('active');
+  if(mode==='station')document.getElementById('btnStation').classList.add('active');
+  if(mode==='erase')document.getElementById('btnErase').classList.add('active');
+  cw.classList.toggle('draw-mode',mode!=='none');
+  drawCursor.style.display=mode!=='none'?'block':'none';
+  if(mode==='draw'){drawCursor.style.width='16px';drawCursor.style.height='16px';drawCursor.style.borderColor='#f97316';}
+  else if(mode==='erase'){drawCursor.style.width=ERASE_R*2+'px';drawCursor.style.height=ERASE_R*2+'px';drawCursor.style.borderColor='#ef4444';drawCursor.style.background='rgba(239,68,68,0.08)';}
+  else if(mode==='station'){drawCursor.style.width='40px';drawCursor.style.height='40px';drawCursor.style.borderColor='#34d399';drawCursor.style.background='rgba(52,211,153,0.08)';}
+  else{drawCursor.style.background='none';}
+}
+function toggleDraw(){setDrawMode(drawMode==='draw'?'none':'draw');}
+function toggleStation(){setDrawMode(drawMode==='station'?'none':'station');}
+function toggleErase(){setDrawMode(drawMode==='erase'?'none':'erase');}
+function clearDrawn(){
+  obstacles.length=drawnObsStart; // remove all user-drawn, keep scenario
+  toast('Gezeichnete Wände gelöscht');
+}
+
+function drawObsAt(mx,my){
+  // Don't draw on top of stations
+  for(const s of stations){if(Math.sqrt((s.x-mx)**2+(s.y-my)**2)<50)return;}
+  // Don't draw on top of agents
+  for(const a of agents){if(Math.sqrt((a.x-mx)**2+(a.y-my)**2)<30)return;}
+  // Min spacing between drawn obstacles
+  for(let i=drawnObsStart;i<obstacles.length;i++){
+    const o=obstacles[i];
+    if(Math.sqrt((o.x-mx)**2+(o.y-my)**2)<DRAW_SPACING)return;
+  }
+  obstacles.push({x:mx,y:my,r:DRAW_R});
+}
+
+function eraseAt(mx,my){
+  // Only erase user-drawn obstacles (index >= drawnObsStart)
+  for(let i=obstacles.length-1;i>=drawnObsStart;i--){
+    const o=obstacles[i];
+    if(Math.sqrt((o.x-mx)**2+(o.y-my)**2)<ERASE_R+o.r){
+      obstacles.splice(i,1);
+    }
+  }
+}
+
+function placeStation(mx,my){
+  // Don't place on obstacles
+  for(const o of obstacles){if(Math.sqrt((o.x-mx)**2+(o.y-my)**2)<40)return;}
+  // Don't place on existing stations
+  for(const s of stations){if(Math.sqrt((s.x-mx)**2+(s.y-my)**2)<70)return;}
+  const st=safeStation(mx,my,nextStationType%STATION_TYPES.length);
+  stations.push(st);
+  targets=stations.map(s=>({x:s.x,y:s.y}));
+  nextStationType++;
+  toast('Station: '+STATION_TYPES[st.type].icon+' '+STATION_TYPES[st.type].name);
+  // Re-assign agents without a valid station
+  for(const a of agents){if(!a.isMouseControlled&&a.targetStation<0)assignNextStation(a);}
+}
+
+// ===== MOUSE HANDLING =====
+canvas.addEventListener('mousedown',e=>{
+  const r=canvas.getBoundingClientRect();
+  const mx=e.clientX-r.left,my=e.clientY-r.top;
+  mouseX=mx;mouseY=my;
+  const agentR=+document.getElementById('pR').value;
+
+  if(drawMode==='draw'){isDrawing=true;drawObsAt(mx,my);return;}
+  if(drawMode==='erase'){isDrawing=true;eraseAt(mx,my);return;}
+  if(drawMode==='station'){placeStation(mx,my);return;}
+
+  // Normal mode: check if clicking on an agent
+  for(let i=agents.length-1;i>=0;i--){
+    const a=agents[i];
+    if(Math.sqrt((a.x-mx)**2+(a.y-my)**2)<agentR*1.5){
+      dragIdx=i;canvas.style.cursor='grabbing';return;
+    }
+  }
+  dragIdx=-1;
+});
+canvas.addEventListener('mousemove',e=>{
+  const r=canvas.getBoundingClientRect();
+  mouseX=e.clientX-r.left;mouseY=e.clientY-r.top;
+  // Update custom cursor
+  if(drawMode!=='none'){
+    drawCursor.style.left=mouseX+'px';drawCursor.style.top=mouseY+'px';
+  }
+  if(isDrawing&&drawMode==='draw')drawObsAt(mouseX,mouseY);
+  if(isDrawing&&drawMode==='erase')eraseAt(mouseX,mouseY);
+  if(dragIdx>=0){agents[dragIdx].x=mouseX;agents[dragIdx].y=mouseY;}
+});
+canvas.addEventListener('mouseup',()=>{isDrawing=false;dragIdx=-1;if(drawMode==='none')canvas.style.cursor='crosshair';});
+canvas.addEventListener('mouseleave',()=>{isDrawing=false;dragIdx=-1;if(drawMode==='none')canvas.style.cursor='crosshair';drawCursor.style.display='none';});
+canvas.addEventListener('mouseenter',()=>{if(drawMode!=='none')drawCursor.style.display='block';});
+
+// ===== CONTROLS =====
+function bs(id,vid,tr){const e=document.getElementById(id),v=document.getElementById(vid);e.addEventListener('input',()=>{v.textContent=tr?tr(+e.value):e.value;});}
+bs('pR','vR');bs('pV','vV');bs('pA','vA2');bs('pTr','vTr');
+bs('pKappa','vKappa',v=>1<<v);bs('pOmega','vOmega');
+bs('pAlpha','vAlpha');bs('pBeta','vBeta');bs('pGamma','vGamma');
+['pR','pV','pA','pTr'].forEach(id=>document.getElementById(id).addEventListener('input',computeZones));
+function togglePause(){paused=!paused;document.getElementById('btnP').textContent=paused?'▶ Play':'⏸ Pause';document.getElementById('btnP').classList.toggle('active',paused);}
+function resetSim(){frame=0;setDrawMode('none');scenario(curScenario);}
+
+// === HELP OVERLAY ===
+function toggleHelp(){document.getElementById('help').classList.toggle('open');}
+document.getElementById('help').addEventListener('click',e=>{if(e.target.id==='help')toggleHelp();});
+
+// === KEYBOARD SHORTCUTS ===
+document.addEventListener('keydown',e=>{
+  // Skip if typing in an input field
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;
+  const k=e.key.toLowerCase();
+  if(k===' '){e.preventDefault();togglePause();}
+  else if(k==='r'){resetSim();}
+  else if(k==='1'){scenario('wall');}
+  else if(k==='2'){scenario('open');}
+  else if(k==='3'){scenario('maze');}
+  else if(k==='4'){scenario('maze2');}
+  else if(k==='5'){scenario('maze3');}
+  else if(k==='d'){toggleDraw();}
+  else if(k==='s'){toggleStation();}
+  else if(k==='e'){toggleErase();}
+  else if(k==='c'){clearDrawn();}
+  else if(k==='?'||k==='h'){toggleHelp();}
+  else if(k==='escape'&&document.getElementById('help').classList.contains('open')){toggleHelp();}
+});
+
+// === FPS / STEP TIME COUNTER ===
+let _fpsLastT=performance.now(),_fpsFrames=0,_fpsVal=0,_stepMsAccum=0,_stepMsCount=0,_stepMsAvg=0;
+function _updatePerf(stepMs){
+  _fpsFrames++;
+  if(stepMs!==undefined){_stepMsAccum+=stepMs;_stepMsCount++;}
+  const now=performance.now();
+  if(now-_fpsLastT>=500){
+    _fpsVal=Math.round(_fpsFrames*1000/(now-_fpsLastT));
+    _stepMsAvg=_stepMsCount>0?(_stepMsAccum/_stepMsCount):0;
+    document.getElementById('fpsV').textContent=_fpsVal;
+    document.getElementById('stepV').textContent=_stepMsAvg.toFixed(2);
+    _fpsLastT=now;_fpsFrames=0;_stepMsAccum=0;_stepMsCount=0;
+  }
+}
+
+function loop(){
+  if(!paused){
+    const t0=performance.now();
+    step();
+    _updatePerf(performance.now()-t0);
+  } else {
+    _updatePerf();
+  }
+  draw();
+  requestAnimationFrame(loop);
+}
+window.addEventListener('resize',()=>{resize();initTrails();initPheroGrid();});
+resize();initTrails();initPheroGrid();scenario('wall');loop();
+</script>
+</body>
+</html>
