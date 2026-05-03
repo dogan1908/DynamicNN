@@ -2,7 +2,10 @@
 
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[ngerman]{babel}
 \usepackage[margin=2.5cm]{geometry}
+\usepackage{microtype}
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{booktabs}
 \usepackage{array}
@@ -13,7 +16,27 @@
 \usepackage[ruled,vlined,linesnumbered]{algorithm2e}
 \usepackage{float}
 \usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!50!black,
+  citecolor=blue!50!black,
+  urlcolor=blue!60!black,
+  pdftitle={Compass16-LBM: Lattice-Boltzmann-inspirierte Schwarmkoordination},
+  pdfauthor={Dogan Balban},
+  pdfsubject={Schwarmkoordination, Lattice-Boltzmann, Embedded Systems},
+  pdfkeywords={LBM, swarm coordination, integer arithmetic, embedded systems, compass discretization}
+}
 \usepackage{enumitem}
+
+% Improve breaking of long German compound words & hyphenated terms
+\hyphenation{Lattice-Boltz-mann-Me-tho-de Schwarm-ko-or-di-na-tion
+  Kom-pass-dis-kre-ti-sie-rung Mi-kro-con-trol-lern Mi-kro-con-trol-ler
+  Re-yn-olds-Floc-king Ge-schwin-dig-keits-mo-dell
+  Ge-schwin-dig-keits-vek-tor Ge-schwin-dig-keits-klas-sen
+  Be-we-gungs-ten-denz Be-we-gungs-im-puls Be-we-gungs-rich-tung
+  Sicher-heits-ab-stand Wahr-neh-mungs-schicht Sta-bi-li-t\"ats-be-din-gung
+  Ant-ip-aral-le-li-t\"at Hin-der-nis-be-hand-lung Po-si-tions-up-date
+  Re-la-xa-tions-schritt Gleich-ge-wichts-ver-tei-lung}
 
 \newtheorem{definition}{Definition}
 \newtheorem{theorem}{Theorem}
@@ -350,7 +373,8 @@ F\"ur numerische Stabilit\"at muss gelten:
 Der stabile und praktisch sinnvolle Bereich ist $\mathbf{32 \leq \omega \leq 256}$.
 \end{proposition}
 
-\textbf{Implementierung:}
+\noindent\textbf{Implementierung:}
+
 \begin{algorithm}[H]
 \SetAlgoLined
 \KwIn{$f[0..16]$, $\feq[0..16]$, $\omega$}
@@ -358,9 +382,10 @@ Der stabile und praktisch sinnvolle Bereich ist $\mathbf{32 \leq \omega \leq 256
 \For{$k \leftarrow 0$ \KwTo $16$}{
     $\Delta \leftarrow f[k] - \feq[k]$\;
     $f^*[k] \leftarrow f[k] - (\omega \cdot \Delta) \gg 8$\;
-    \lIf{$f^*[k] < 0$}{$f^*[k] \leftarrow 0$} \tcp*{Nicht-Negativit\"at sicherstellen}
+    \tcp{Nicht-Negativit\"at sicherstellen}
+    \lIf{$f^*[k] < 0$}{$f^*[k] \leftarrow 0$}
 }
-\caption{Integer-Relaxation (17 Subtraktionen + 17 Multiplikationen + 17 Shifts)}
+\caption{Integer-Relaxation (BGK-Schema)}
 \end{algorithm}
 
 \textbf{Kosten:} $17 \times (1\text{ Sub} + 1\text{ Mul} + 1\text{ Shift} + 1\text{ Vgl}) = 68$ Integer-Zyklen pro Agent.
@@ -447,10 +472,10 @@ dynamische Objekte haben ver\"anderliche. Die Abfrage kostet 2 Integer-Vergleich
     \BlankLine
     \tcp{\textbf{Phase 2: Sollbewegung berechnen} (Gl.~\ref{eq:utarget})}
     $\kappa_Z \leftarrow \compass(\mathbf{x}_{\mathrm{Ziel}} - \mathbf{x}_A)$\;
-    $u_x \leftarrow \alpha \cdot c_{\kappa_Z,x}
-    - \beta \cdot \sum_{j:\,d^2_j < d^2_{\min}} (d^2_{\min}/d^2_j) \cdot c_{\kappa_j,x}
-    + \gamma \cdot \sum_{j:\,d^2_j > d^2_{\max}} (d^2_j/d^2_{\max}) \cdot c_{\kappa_j,x}$\;
-    $u_y \leftarrow$ \text{analog f\"ur $y$-Komponente}\;
+    $u_x \leftarrow \alpha \cdot c_{\kappa_Z,x}$ \tcp*{Navigation}
+    $u_x \leftarrow u_x - \beta \cdot {\textstyle\sum_{j:\, d^2_j < d^2_{\min}}} (d^2_{\min}/d^2_j)\, c_{\kappa_j,x}$ \tcp*{Separation}
+    $u_x \leftarrow u_x + \gamma \cdot {\textstyle\sum_{j:\, d^2_j > d^2_{\max}}} (d^2_j/d^2_{\max})\, c_{\kappa_j,x}$ \tcp*{Koh\"asion}
+    $u_y \leftarrow$ analog f\"ur $y$-Komponente\;
     \BlankLine
     \tcp{\textbf{Phase 3: Gleichgewicht berechnen} (Gl.~\ref{eq:feq})}
     \For{$k \leftarrow 0$ \KwTo $16$}{
